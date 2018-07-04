@@ -942,7 +942,32 @@ gap.fa中1:2000都是碱基对应scaffols.fasta中120842:118843是反向序列
 如果尾部没有NNN也要先在尾部加多个NNN然后将首部的10kb放在尾端比对并补gap
 
 
-线粒体组装
+bowtie
+可以sudo apt install bowtie安装
+或在官网下载安装包
+samtools
+可以sudo apt install samtools安装
+或在官网下载安装包
+
+bowtie.sh
+```
+#$ -S /bin/sh
+if [ $# -eq 0 ]; then
+        echo "Program: Package the sequecing data and statics for mtFish sequencing"
+        echo "Usage: $0 <fasta> <fq1> <fq2>"
+        exit 1
+fi
+
+ref=$1
+fq1=$2
+fq2=$3
+echo '#$ -S /bin/sh' > bow.sh
+echo "bowtie2-2.2.5/bowtie2-build ${ref} long" >> bow.sh
+echo "bowtie2-2.2.5/bowtie2 -x long -1  ${fq1} -2 ${fq2} -p 25 |samtools view -SbF 0x804 - |samtools sort -@ 25 - > long.srt.bam " >> bow.sh
+echo  'samtools index long.srt.bam'  >> bow.sh
+#注意，需要提交到大型机上运行
+qsub -cwd -l vf=20g bow.sh
+```
 
 
 

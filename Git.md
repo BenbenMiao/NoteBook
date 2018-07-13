@@ -1,8 +1,8 @@
-1.新建git本地文件夹
+**1.新建git本地文件夹**
 
 `mkdir gitpjt`
 
-2.初始化仓库
+**2.初始化仓库**
 
 从本地新建并产生初始化文件
 `git init`
@@ -10,11 +10,11 @@
 或者从远程克隆版本库
 `git clone rep_url`
 
-3.新建介绍文件
+**3.新建介绍文件**
 
 `vim readme.md`
 
-4.本地->缓冲区
+**4.本地->缓冲区**
 
 只添加指定文件
 `git add readme.md` 
@@ -22,19 +22,19 @@
 添加当前文件夹内所有文件
 `git add .`
 
-5.缓冲区->仓库
+**5.缓冲区->仓库**
 
-`git commit -m "add readme.md"
+`git commit -m "add readme.md`
 
-6.更改本地文件内容，版本比较中如果缓冲区有该文件则将缓冲区与本地文件比较，如果没有则仓库文件与本地文件比较
+**6.更改本地文件内容，版本比较中如果缓冲区有该文件则将缓冲区与本地文件比较，如果没有则仓库文件与本地文件比较**
 
 `git diff readme.md`
 
-7.查看当前状态
+**7.查看当前状态**
 
 `git status`
 
-8.查看日志
+**8.查看日志**
 
 当前版本之前的md5日志：
 `git log`
@@ -51,11 +51,11 @@
 以列表形式查看指定文件的日志
 `git blame file_name`
 
-9.缓冲区版本撤销并覆盖本地版本
+**9.缓冲区版本撤销并覆盖本地版本**
 
 `git checkout -- readme.md`
 
-10.仓库以前版本找回并覆盖本地版本
+**10.仓库以前版本找回并覆盖本地版本**
 
 回到前1个版本
 `git reset --hard HEAD^` 
@@ -66,7 +66,7 @@
 xxx表示每个版本对应的md5前7位数，可以在log和reflog中查看，可以回到任何版本
 `git reset --hard xxxxxxx`  
 
-10.删除仓库中的文件
+**10.删除仓库中的文件**
 
 删除仓库的文件，但保留本地的该文件
 `git rm --cached readme.md` 
@@ -76,15 +76,15 @@ xxx表示每个版本对应的md5前7位数，可以在log和reflog中查看，�
 
 注意：删除后的文件在git reflog中无法找到md5，所以无法找回以前的版本，应该慎重并做好备份
 
-11.修改文件名称
+**11.修改文件名称**
 
 `git mv old_name new_name`
 
-12.修改最后一次提交
+**12.修改最后一次提交**
 
-`git commit --amend
+`git commit --amend`
 
-13.分支branch与标签tag
+**13.分支branch与标签tag**
 
 显示所有本地分支
 `git branch`
@@ -115,7 +115,7 @@ xxx表示每个版本对应的md5前7位数，可以在log和reflog中查看，�
 衍合指定分支到当前分支
 `git rebase <branch_name>`
 
-15.远程操作
+**15.远程操作**
 
 查看远程版本库信息
 `git remote -v`

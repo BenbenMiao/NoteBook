@@ -1594,21 +1594,477 @@ Orecord.close()
 
 ==========================================================================
 
+九、ncbi的sra-toolkit使用
+
+sra-toolkit安装：
+sudo apt install sra-toolkit
+安装后其下包括多个工具
+
+1.下载序列
+prefetch -h
+#查看帮助
+prefetch accessioni_id
+#下载sra序列文件
+prefetch SRR1553610
+#下载的文件默认保存在/home/username/ncbi/public/sra/SRR1553610.sra
+
+常用命令
+Data transfer:
+# 如果已有下载的文件是否强制下载，默认为非强制
+-f  |   --force <value> Force object download. One of: no, yes, all. no [default]: Skip download if the object if found and complete; yes: Download it even if it is found and is complete; all: Ignore lock files (stale locks or if it is currently being downloaded: use at your own risk!).
+
+# 选择下载的方式 ascp 和 http，默认先尝试 ascp，再尝试http
+--transport <value> Value one of: ascp (only), http (only), both (first try ascp, fallback to http). Default: both.
+
+# 列举 kart 文件中的 内容，大小
+# 你可以把需要下载的项目放入 kart 文件
+-l  |   --list  List the contents of a kart file.
+-s  |   --list-sizes    List the content of kart file with target file sizes.
+
+# 设置文件的最小尺寸
+-N  |   --min-size <size>   Minimum file size to download in KB (inclusive).
+
+# 设置文件的最大尺寸
+-X  |   --max-size <size>   Maximum file size to download in KB (exclusive). Default: 20G.
+
+# 排序方式
+-o  |   --order <value> Kart prefetch order. One of: kart (in kart order), size (by file size: smallest first). default: size.
+
+2.文件格式转换
+fastq-dump -h
+#查看帮助
+fastq-dump --split-files accession_id
+fastq-dump --split-files local_file
+
+fastq-dump --split-files SRR1553610.sraRead 219837 spots for SRR1553610.sra
+#从NCBI下下来的数据，双端测序数据是放在一个文件里的，所以需要把它们重新拆解为两个fasta格式的文件
+
+General:
+-h  |   --help  Displays ALL options, general usage, and version information.
+-V  |   --version   Display the version of the program.
+Data formatting:
+#分割 paired-end data
+--split-files   Dump each read into separate file. Files will receive suffix corresponding to read number.
+--split-spot    Split spots into individual reads.
+
+# 只保留fasta，没有质量得分
+--fasta <[line width]>  FASTA only, no qualities. Optional line wrap width (set to zero for no wrapping).
+-I  |   --readids   Append read id after spot id as 'accession.spot.readid' on defline.
+-F  |   --origfmt   Defline contains only original sequence name.
+-C  |   --dumpcs <[cskey]>  Formats sequence using color space (default for SOLiD). "cskey" may be specified for translation.
+-B  |   --dumpbase  Formats sequence using base space (default for other than SOLiD).
+-Q  |   --offset <integer>  Offset to use for ASCII quality scores. Default is 33 ("!").
+Filtering:
+-N  |   --minSpotId <rowid> Minimum spot id to be dumped. Use with "X" to dump a range.
+-X  |   --maxSpotId <rowid> Maximum spot id to be dumped. Use with "N" to dump a range.
+-M  |   --minReadLen <len>  Filter by sequence length >= <len>
+--skip-technical    Dump only biological reads.
+--aligned   Dump only aligned sequences. Aligned datasets only; see sra-stat.
+--unaligned Dump only unaligned sequences. Will dump all for unaligned datasets.
+
+# 输出数据
+Workflow and piping:
+-O  |   --outdir <path> Output directory, default is current working directory ('.').
+-Z  |   --stdout    Output to stdout, all split data become joined into single stream.
+--gzip  Compress output using gzip.
+--bzip2 Compress output using bzip2.
+
+3.查看文件内容和计算
+head SRR1553610_1.fastq
+#计算含有@SRR的行数
+cat *.fastq | grep @SRR | wc -l
+
+4.同时下载多个文件
+echo SRR1553607 > sra.ids
+echo SRR1553605 >> sra.ids
+#--option-file参数下载列表里多个文件
+prefetch --option-file sra.ids
 
 
+5.更方便地下载，使用esearch和efetch
+sudo apt install acedb-other
+sudo apt install ncbi-entrez-direct
 
+esearch -db sra -query PRJNA257197  | efetch -format runinfo
+#查看
+esearch -db sra -query PRJNA257197  | efetch -format runinfo > runinfo.txt
+cat runinfo.txt|wc -l
+927
+cat runinfo.txt|grep SRR|wc -l
+891
+#由于这是一个逗号分隔符的文件，我们需要把分隔符（用以区别不同列的符号）指明给cut程序
+cat runinfo.txt | cut -f 1 -d ","
+网页版的截图里，你也可以看到，最终结果确实是891个
+6.查询当前用户目录下的所占用的空间
+du -hs * 
+7.在NCBI 网站上的手动操作，获取一个project里的所有SRR ID
+首先进入https://www.ncbi.nlm.nih.gov/sra/
+输入你要找的这个编号：PRJNA257197 
+点击search
+会看到很多检索结果 
+点击右上角的send to 
+选定File，并把Format改为RunInfo
+点击Create File就生成了一个SraRunInfo.csv文件了 
 
+========================================================================
 
+十、Q20和Q30数值的判定
 
+readsQC.py文件
 
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+本程序用于对拿到的reads做前期QC
+mkdir 01.fq, 将fq.gz文件链接过来后
+python readsQC.py step1 01.fq/*.fq.gz
+# 会生成02.qc文件夹，里边放的是初步QC结果
+再确定NCBI上是否有比较近的物种，如果有
+mkdir 00.ref, 将NCBI上找到的几个近缘物种的fna文件（如XX.fa）放到00.ref中
+python readsQC.py step2 -r 00.ref/XX.fa 01.fq/*.fq.gz
+如果NCBI没有比较近的近缘物种,先进行组装
+python readsQC.py step2 01.fq/*.fq.gz
+因为组装程序上抛集群，本程序在此不设监控，待组装完成后
+python readsQC.py getscf 03.ass/spadeAss/scaffolds.fasta
+Author: Luria
+Data: 2016.8.29
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+import sys
+import os
+import re
+import gzip
+import pysam
+import argparse
+from Bio import SeqIO
 
+ITOOLS = '/hellogene/scgene01/bio/bin/iTools'
+FASTQC = '/hellogene/scgene01/bio/software/FastQC/fastqc'
+BWA = '/hellogene/scgene01/bio/bin/bwa'
+SAMTOOLS = '/hellogene/scgene01/bio/bin/samtools'
+SPADES = '/hellogene/scgene01/bio/pip/ass/SPAdes-3.5.0-Linux/bin/spades.py'
+PYTHON = '/hellogene/scgene01/opt/bin/python'
+ALIGNPATH = '02.qc/align'
+ASSPATH = '03.ass'
 
+def info2xls1(baseinfo, replic):
+	outfile = open('02.qc/Basicinfo.xls', 'w')
+	print >> outfile, '#%s \t%s \t%s \t%s \t%s \t%s \t%s' %('FastqFile',
+	'ReadsNum', 'BaseNum', 'GC', 'Q20', 'Q30', 'RepRate')
 
+	#~ Dispose baseinfo.txt file, which contain the information of Q20, Q30, GC and so on
+	baseinfo = open(baseinfo, 'r')
+	infolist = []
+	for i in baseinfo:
+		if i.startswith('##'):
+			samplename = i.strip().strip('#')
+			infolist.append(samplename)
+		if i.startswith('#ReadNum'):
+			numlist = re.findall(r'\d+', i)
+			infolist.append(numlist[0])
+			infolist.append(numlist[1])
+		if i.startswith('#GC'):
+			gc = i.split()[1]
+			infolist.append(gc)
+		if i.startswith('#BaseQ') and re.search(r'Q20', i):
+			Q20 = i.split()[-1]
+			infolist.append(Q20)
+		if i.startswith('#BaseQ') and re.search(r'Q30', i):
+			Q30 = i.split()[-1]
+			infolist.append(Q30)
 
+	#~ Dispose Replic.txt file, which contain replication information
+	repline = open(replic, 'r').next()
+	reprate = repline.strip().split()[-1]
+	infolist.append(reprate)
+	if len(infolist) != 13:
+		print '\033[1;32;41m'
+		print '-- There are some errors in "02.qc/baseinfo.txt", please check !!'
+		print '\033[0m'
+	#~ print infolist
+	print >> outfile, '\t'.join(infolist[:6])
+	print >> outfile, '\t'.join(infolist[6:])
+	outfile.close()
 
+def fastqc(fq1, fq2):
+	if not os.path.exists('02.qc/fastqc'):
+		os.mkdir('02.qc/fastqc')
+	cmd = FASTQC + ' -o 02.qc/fastqc --extract -t 16 -f fastq ' + fq1 + ' ' + fq2
+	#~ print cmd
+	if os.path.exists(FASTQC):
+		os.system(cmd)
+	else:
+		print '-- Cannot find fastqc in path "/hellogene/scgene01/bio/software/FastQC/fastqc"'
+		exit(1)
 
+def getQ20(fq1, fq2):
+	if not os.path.exists('02.qc'):
+		os.mkdir('02.qc')
+	cmd = ITOOLS + ' Fqtools stat -MinBaseQ ! -CPU 4 -InFq ' + fq1 + ' -InFq ' + fq2 + ' -OutStat 02.qc/baseinfo.txt'
+	#~ print cmd
+	if os.path.exists(ITOOLS):
+		os.system(cmd)
+	else:
+		print '-- Cannot find iTools in path "/hellogene/scgene01/bio/bin/bwa"'
+		exit(1)
 
+def statRepli(fqfile1, fqfile2):
+	START = 30
+	END = 60
+	LINE = 4*600000
+	fq1 = gzip.open(fqfile1, 'rt')
+	fq2 = gzip.open(fqfile2, 'rt')
+	outfile = open('02.qc/Repli.txt', 'w')
+	seledic = {}
+	for i in xrange(1,LINE):
+		if (i+2) % 4 == 0:
+			read1 = fq1.readline()
+			read2 = fq2.readline()
+			seq1 = read1[START: END]
+			seq2 = read2[START: END]
+			seq = "%s%s" % (seq1, seq2)
+			#~ seq = seq1 + seq2
+			#~ seledic.setdefault(seq, []).append(1)
+			if seq in seledic:
+				seledic[seq] += 1
+			else:
+				seledic[seq] = 1
+		else:
+			fq1.readline()
+			fq2.readline()
+	rep = 0
+	for i in seledic.values():
+		if i!= 1:
+			rep += (i-1)
+	reprate = round(float(rep)*4*100/LINE, 2)
+	print >> outfile, 'Repetition Rate: %s%%' %reprate
+	outfile.close()
 
+def remap(ref, fq1, fq2):
+	if not os.path.exists(ALIGNPATH):
+		os.mkdir(ALIGNPATH)
+	shell = open(ALIGNPATH + '/r.mp.sh', 'w')
+	if not os.path.exists(ref+'.sa'):
+		if os.path.exists(BWA):
+			index = '/hellogene/scgene01/bio/bin/bwa index '+ref
+			os.system(index)
+		else:
+			print '-- Cannot find bwa in path "/hellogene/scgene01/bio/bin/bwa"'
+			exit(1)
+
+	if os.path.exists(BWA) and os.path.exists(SAMTOOLS):
+		print >> shell, '#$ -S /bin/sh'
+		print >> shell, '%s mem -t 14 %s %s %s | %s view -SbF 0x804 - | %s sort -@ 8 - %s/genome.map' %(BWA, ref, fq1, fq2, SAMTOOLS, SAMTOOLS, ALIGNPATH)
+		print >> shell, '%s stats %s/genome.map.bam | grep ^COV | cut -f 2- > %s/map.cov' %(SAMTOOLS, ALIGNPATH, ALIGNPATH)
+		print >> shell, '%s depth %s/genome.map.bam > %s/map.dp' %(SAMTOOLS, ALIGNPATH, ALIGNPATH)
+		print >> shell, '%s index %s/genome.map.bam' %(SAMTOOLS, ALIGNPATH)
+		shell.close()
+		#~ qsub = 'qsub -cwd -l vf=4g 02.qc/align/r.mp.sh'
+		cmd = 'sh '+ALIGNPATH+'/r.mp.sh'
+		os.system(cmd)
+	else:
+		print '-- Cannot find bwa in path "/hellogene/scgene01/bio/bin/bwa"'
+		print '-- OR ...'
+		print '-- Cannot find samtools in path "/hellogene/scgene01/bio/bin/samtools"'
+		exit(1)
+
+def average(lst):
+	num = len(lst)
+	summary = sum(lst)
+	aver = round(summary / num, 2)
+	return aver
+
+def averDepth(depfile):
+	outname = os.path.dirname(depfile)+'/averDepth.info'
+	outfile = open(outname, 'w')
+	dep ={}
+	for i in open(depfile, 'r'):
+		eachlst = re.findall(r'\w+', i)
+		seqid = eachlst[0]
+		seqdep = int(eachlst[-1])
+		dep.setdefault(seqid, []).append(seqdep)
+
+	newdep ={}
+	for k, v in dep.items():
+		averdep = average(v)
+		newdep.setdefault(k, averdep)
+	sortdep = sorted(newdep.iteritems(), key = lambda d:d[1], reverse=True)
+	print >> outfile, '%s\t%s' %('Seqid', 'Average_depth')
+	for j in sortdep:
+		print >> outfile, '%s\t%s' %(j[0], j[1])
+	outfile.close()
+
+def statBam(bam, fqfile1):
+	outname = os.path.dirname(bam)+'/statBam.info'
+	outfile = open(outname, 'w')
+	samfile = pysam.AlignmentFile(bam, 'rb')
+	align = samfile.count(until_eof=True)
+
+	fq1 = gzip.open(fqfile1, 'rt')
+	fq1num = 0
+	while True:
+		line = fq1.readline()
+		if len(line) == 0:
+			break
+		fq1num += 1
+	total = fq1num/2
+	#~ total = (fq1num+fq2num)/4 = (fq1num)*2/4 = fq1num/2
+	percent = round(float(align)*100/int(total), 2)
+	print >> outfile, 'Total Reads: %s' %(total)
+	print >> outfile, 'Align Reads: %s' %(align)
+	print >> outfile, 'Percent: %s%%' %(percent)
+	outfile.close()
+
+def info2xls2(bamFile, averDepFile):
+	outname = os.path.dirname(bamFile)+'/Aligninfo.xls'
+	outfile = open(outname, 'w')
+	print >> outfile, '#%s \t%s \t%s \t%s' %('Total_Reads', 'Align_Reads', 'Align_Percent', 'Average_Depth')
+	info = []
+	baminfo = open(bamFile, 'r')
+	averdep = open(averDepFile, 'r')
+	for i in baminfo:
+		num = i.strip().split()[-1]
+		info.append(num)
+	for i in averdep:
+		if i.startswith('Seqid'):
+			continue
+		num = i.strip().split()[-1]
+		info.append(num)
+	print >> outfile, '\t'.join(info)
+	averdep.close()
+	baminfo.close()
+	outfile.close()
+
+def assReads(fq1, fq2):
+	if os.path.exists(SPADES) and os.path.exists(PYTHON):
+		shell = open(ASSPATH+'/spade.sh', 'w')
+		print >> shell, '#$ -S /bin/sh'
+		print >> shell, '%s %s -k 79,97 --only-assembler -1 %s -2 %s -t 15 -m 50 -o %s/spadeAss' %(
+				PYTHON, SPADES, fq1, fq2, ASSPATH)
+		shell.close()
+		qsub = 'qsub -cwd -l vf=50g %s/spade.sh' %(ASSPATH)
+		os.system(qsub)
+
+def step2(Args):
+	USAGE = "step2 [options] <*fq.gz>"
+	parser = argparse.ArgumentParser(usage = USAGE.lower())
+	parser.add_argument('-r', dest='reference',
+					help="The closed reference of target species, which contain multifasta generally")
+
+	parser.add_argument('-c', dest='closed',
+					help="")
+	parser.add_argument(dest='fq1', help='R1.fq.gz')
+	parser.add_argument(dest='fq2', help='R2.fq.gz')
+	if not Args:
+		print '\033[1;32;31m',
+		parser.print_help()
+		print '\033[0m'
+		exit(1)
+	args = parser.parse_args(args = Args)
+	ref = args.reference
+	fq1 = os.path.abspath(args.fq1)
+	fq2 = os.path.abspath(args.fq2)
+	if ref:
+		refPATH = os.path.abspath(ref)
+		print '\033[1;32;31m',
+		print '-- Reads remap to reference',
+		print '\033[0m'
+		remap(refPATH, fq1, fq2)
+
+		print '\033[1;32;31m',
+		print '-- Calculate average depth',
+		print '\033[0m'
+		averDepth(ALIGNPATH + '/map.dp')
+
+		print '\033[1;32;31m',
+		print '-- Calculate align Rate',
+		print '\033[0m'
+		statBam(ALIGNPATH+'/genome.map.bam', fq1)
+
+		print '\033[1;32;31m',
+		print '-- Dispose averdep and align info to xls',
+		print '\033[0m'
+		info2xls2(ALIGNPATH+'/statBam.info', ALIGNPATH+'/averDepth.info')
+
+	else:
+		if not os.path.exists(ASSPATH):
+			os.mkdir(ASSPATH)
+		print '\033[1;32;31m',
+		print '-- Assembly reads by SPAdes',
+		print '\033[0m'
+		assReads(fq1, fq2)
+
+def getScf(Args):
+	USAGE = 'Usage: getscf <scaffolds.fasta>\n <scaffolds.fasta> is the result of SPAdes'
+	if not Args:
+		print '\033[1;32;31m',
+		print USAGE
+		print '\033[0m'
+		exit(1)
+	else:
+		ctg = Args[0]
+	record = SeqIO.parse(ctg, 'fasta')
+	lendic = {}
+	seqdic = {}
+	count = 0
+	outfile = open('First_30_scaffolds.fasta', 'w')
+	for i in record:
+		if count >= 30:
+			break
+		print >> outfile, '>%s\n%s' %(i.id, i.seq)
+		count += 1
+	outfile.close()
+
+#~ ************************************************************
+USAGE = '''\
+Program: readsQC.py is used to QC raw data (fastq file)
+Usage: readsQC.py <command> [option]
+
+Command:
+	step1	Doing preliminary QC
+	step2	Doing advanced QC
+	getscf	Pick 20 lengest scaffolds from the result of SPAdes
+Author: Luria
+Date: 2016.8.10
+'''
+#~ ************************************************************
+
+if __name__ == '__main__':
+	if len(sys.argv) == 1 :
+		print '\033[1;32;31m'+USAGE,
+		print '\033[0m'
+		exit(1)
+	if sys.argv[1] == 'step1':
+		if len(sys.argv) == 2:
+			print '-- Usage: python %s step1 <*fq.gz>' %(sys.argv[0])
+			exit(1)
+		else:
+			getQ20(sys.argv[2], sys.argv[3])
+			fastqc(sys.argv[2], sys.argv[3])
+			statRepli(sys.argv[2], sys.argv[3])
+			info2xls1('02.qc/baseinfo.txt', '02.qc/Repli.txt')
+
+	elif sys.argv[1] == 'step2':
+		step2(sys.argv[2:])
+
+	elif sys.argv[1] == 'getscf':
+		'''Because assembly by SPAdes，
+			it is better to used scaffolds instead of contigs'''
+		getScf(sys.argv[2:])
+
+	else:
+		print '\033[1;32;31m'+USAGE
+		print '\033[0m'
+		exit(1)
+
+========================================================================
+
+十一、kmer.sh和soap
+
+#$ -S /bin/sh
+mkdir K96
+SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K96/genome -K 96 -p 32
+mkdir K127
+SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K127/genome -K 127 -p 32
 
 
 

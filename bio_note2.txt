@@ -3,6 +3,26 @@
 2.确定分子标记(此例为cox1)
 3.根据物种accession列，生成t.info文件（accession number和物种名用Tab键格开）
 4.根据t.info文件下载（包括outgroup物种）和目标物种cds多序列文件
+
+软件及安装：
+1.asn2all:下载核苷酸，氨基酸，genbank文件
+sudo apt install ncbi-tools-bin
+2.python:pythonIO
+sudo apt install python
+3.R:分析与作图
+sudo apt install r-base
+4.muscle:序列比对
+java环境，不要安装最新的10版本，很多软件无法支持
+apt install muscle
+5.samtools:sqn文件转核苷酸序列，氨基酸序列，生成bam.bai文件
+apt install samtools
+6.blastn:本地序列比对
+7.fastqc
+8.seqtk:取子序列，如从fasta文件中取出对应id的序列，或者前10条序列
+9.awk:文件行处理
+10.sed：shell文件处理
+
+
 mkdir cds
 awk ‘{print $1}’t.info | while read a; do asn2all -r -A $a -o cds/$a.cds -f d; done
 
@@ -54,6 +74,366 @@ awk '{print $1,$2,$3}' t.info | while read a b c ;do echo "sed -i \"s/${a}/'${b}
 bootstrap:以每一列为单位，随机排放各列(行的长度始终相等)，产生不同的多序列
 jackknifing:随机取一半，再随机取一半的一半，再随机取一半的一半的一半...
 
+****************************************************************************
+4.安装awk
+sudo apt-get install awk
+
+5.将ID按行存入list文件，用asn2all同时获取多个cds核酸序列
+awk '{print$1}' list | while read a;do asn2all -r -A $a -o $a.cds -f d;done
+(awk根据域块处理文件的语言，print$1（从第一行起逐行读取打印出来），list为awk操作的文件，|（管道，在前步的结果中继续下一步操作），while ...do...循环读取，a为定义的变量相当于逐行改变的ID，调用变量a用$a,-A的参数为$a,-o的参数为$a.cds方便的核酸序列命名，-f的参数为d,用分号;结束语句，done结束循环）
+
+6.将ID按行存入list文件，用asn2all同时获取多个氨基酸序列
+awk '{print$1}' list | while read a;do asn2all -r -A $a -v $a.faa -f d;done
+（-v的参数为$a.faa方便的氨基酸序列命名）
+
+7.将ID按行存入list文件，用asn2all同时获取多个genbank文件
+awk '{print$1}' list | while read a;do asn2all -r -A $a -o $a.gbk -f d;done
+（-o的参数为$a.gbk是genbank文件命名）
+
+8.使用cat命令从文件中读入两个文件，然后将重定向到一个新的文件。
+用法示例：
+将file1.txt和file2.txt合并到file.txt
+$ cat file1.txt file2.txt > file.txt
+
+也可以只使用cat命令读入一个文件，然后使用>>将文本流追加到另一个文件的末位。
+用法示例：
+将file1.txt追加到file2.txt的末尾
+$ cat file1.txt >> file2.txt
+
+9.将同一目录下相同格式(.txt .faa .cds)的文件以换行合并在新的文件中
+cat *.txt > new.txt
+
+10.修改系统时间
+sudo date 042615202018.00
+（必须用root权限，date命令，参数MMDDhhmmYYYY.ss）
+
+11.安装muscle用来mv 多序列比对
+sudo apt-get install muscle
+
+12.将seqdump.txt中多个序列比对，输出fast格式，便于构树
+muscle -in seqdump.txt -out seq.fa
+（-in 指输入，-out输出，对象为对应的文件，输出文件可任意命名）
+
+13.多序列比对，输出为clusterw格式，便于查看
+muscle -in seqdump.txt -out seq.txt -clw
+（-in 指输入，-out输出，对象为对应的文件，输出文件可任意命名）
+
+14.安装Java环境，并配置环境变量，尽量配置在/etc/profile中的系统变量/usr/benben/.bashrc为当前用户变量
+验证Java安装完成：1)java命令 2）javac命令
+
+15.将fasta格式转为phylip格式
+1）先安装python2.x版本环境
+2）安装biopython包，验证包安装注意：import Bio(不是import biopython)
+3）python ./fa2phy.py name.fa name.phy
+(即将fa文件转为phy文件，注意fa2phy.py的相对路径,现在为当前文件夹）
+
+16.下载Jmodletest.jar文件，用于构建模型)
+1）java -jar jModelTest.jar -help
+(查看帮助，是-help 不是--help)
+
+2）Example: java -jar jModeltest.jar -d name.phy -i -f -g 4 -BIC -AIC -AICc -DT -v -a -w
+(这的name.phy需要替换为自己的phylip文件名，注意jModeltest.jar的相对位置）
+
+3）java -jar ./jModelTest.jar -d name.phy -i -f -g 4 -BIC -AIC -AICc -DT -v -a -w -BIC
+（这个可以执行完成，上个命令可能cannot access）
+
+java -jar ./jModelTest.jar -d seq.phy -i -f -g 4 -BIC -AIC -AICc -DT -v -a -w -BIC
+运行结果出来的模型
+
+在AKAIKE INFORMATION CRITERION (AIC) 处AIC表示最佳，AICc，BIC次之
+AIC处核酸模型为GTR+G最优模型 GTR+G=GTRGAMMA 用于-m的模型参数
+
+Model selected: 
+   Model = GTR+G
+   partition = 012345
+   -lnL = 3231.4514
+   K = 37
+   freqA = 0.3138 
+   freqC = 0.1785 
+   freqG = 0.2425 
+   freqT = 0.2652 
+   R(a) [AC] =  6.4085
+   R(b) [AG] =  31.4451
+   R(c) [AT] =  4.1943
+   R(d) [CG] =  1.1661
+   R(e) [CT] =  50.1875
+   R(f) [GT] =  1.0000
+   gamma shape = 0.7140 
+
+17.模型认识核酸和氨基酸（蛋白质）模型不同
+
+核酸的部分模型
+
+AIC MODEL SELECTION : Selection uncertainty
+ 
+Model             -lnL    K      AIC       delta       weight   cumWeight
+------------------------------------------------------------------------- 
+GTR+G       3231.45141   37  6536.902820   0.000000    0.424639   0.424639 
+GTR+I       3231.51238   37  6537.024760   0.121940    0.399522   0.824160 
+GTR+I+G     3231.44304   38  6538.886080   1.983260    0.157529   0.981689 
+GTR         3235.66839   36  6543.336780   6.433960    0.017018   0.998707 
+HKY+G       3242.08422   33  6550.168440  13.265620    0.000559   0.999266 
+HKY+I       3242.17284   33  6550.345680  13.442860    0.000512   0.999778 
+HKY+I+G     3242.07736   34  6552.154720  15.251900    0.000207   0.999985 
+HKY         3246.67944   32  6557.358880  20.456060   1.53e-005   1.000000 
+SYM+G       3262.21706   34  6592.434120  55.531300   3.71e-013   1.000000 
+SYM+I       3262.31269   34  6592.625380  55.722560   3.37e-013   1.000000 
+SYM+I+G     3262.21393   35  6594.427860  57.525040   1.37e-013   1.000000 
+SYM         3266.36836   33  6598.736720  61.833900   1.59e-014   1.000000 
+K80+G       3270.81576   30  6601.631520  64.728700   3.74e-015   1.000000 
+K80+I       3270.91518   30  6601.830360  64.927540   3.38e-015   1.000000 
+K80+I+G     3270.81340   31  6603.626800  66.723980   1.38e-015   1.000000 
+K80         3274.94698   29  6607.893960  70.991140   1.63e-016   1.000000 
+F81+I       3367.07359   32  6798.147180  261.244360   7.93e-058   1.000000 
+F81+G       3367.09718   32  6798.194360  261.291540   7.75e-058   1.000000 
+F81+I+G     3367.08493   33  6800.169860  263.267040   2.89e-058   1.000000 
+F81         3369.75482   31  6801.509640  264.606820   1.48e-058   1.000000 
+JC+I        3394.89697   29  6847.793940  310.891120   1.31e-068   1.000000 
+JC+G        3394.92949   29  6847.858980  310.956160   1.27e-068   1.000000 
+JC+I+G      3394.91775   30  6849.835500  312.932680   4.74e-069   1.000000 
+JC          3397.64046   28  6851.280920  314.378100   2.30e-069   1.000000
+
+
+
+18.根据模型做进化树RAXML详解
+在RAxML官网下载Linux版本的软件
+
+PDF帮助文件有详细的解压，编译和使用方法
+gunzip standard­RAxML­8.0.0.tar.gz 
+tar xf standard­RAxML­8.0.0.tar
+
+这里使用第一种编译方法，编译两次后最后产生raxmlHPC-PTHREADS-AVX文件
+cd standard­RAxML­8.0.0/
+ls
+ls Makefile.*
+make ­f Makefile.AVX.gcc 
+rm *.o 
+make ­f Makefile.AVX.PTHREADS.gcc 
+产生raxmlHPC-PTHREADS-AVX即是命令需要使用的文件
+
+所以运行：raxmlHPC-PTHREADS-AVX -x 12345 -p 12345 -# 100 -m GTRGAMMA -T 4 -s align_file.phy -n TEST(未出树）
+        raxmlHPC-PTHREADS-AVX -f a -x 12345 -p 12345 -# 100 -m GTRGAMMA -T 4 -s seq.phy -n TEST（完成）
+（注意这里的调用文件的相对路径和绝对路径）
+
+下载和安装
+RAxML 可以在 Linux, MacOS, DOS 下运行，下载网址为自己百度
+也可以使用phylobench.vital-it.ch/raxml-bb/ 在线运行。 对于 Linux 和 Mac 用户下载 RAxML-7.0.4.tar.gz 用 gcc 编译即可, make –f Makefile.gcc。Windows 用户可以下载编译好的 exe 文件，而无需安装。
+2 数据的输入
+RAxML 的数据为 PHYLIP 格式，但是其名字可以增加至 256 个字符。“RAxML 对
+PHYLIP 文件中的 tabs，inset 不敏感”。输入的树的格式为 Newick
+RAxML 的查错功能
+序列的名称有重复，即不同的碱基却拥有一致的名称。
+序列的内容重复，即两条不同名称的序列，碱基完全一致。
+某个位点完全由序列完全由未知符号组成，如氨基酸序列完全由 X,?,*,-组成，DNA 序列完全由 N,O,X,?,-组成。
+序列完全由未知符号组成，如氨基酸序列完全由 X,?,*,-组成，DNA 序列完全由 N,O,X,?,-组成。
+序列名称中禁用的字符 如包括空格、制表符、换行符、:,(),[]等
+3 RAxMLHPC 下的选项参数以及用法
+-s sequenceFileName 要处理的 phy 文件
+-n outputFileName 输出的文件
+-m substitutionModel 模型设定 方括号中的为可选项：
+[-a weightFileName] 设定每个位点的权重，必须在同一文件夹中给出相应位点的权重
+[-b bootstrapRandomNumberSeed] 设定 bootstrap 起始随机数
+[-c numberOfCategories] 设定位点变化率的等级
+[-d] -d 完全随机的搜索进化树，而不是从 maximum parsimony tree 开始。在 100 至 200 个分类单元间，该选可能会生成拓扑结构完全不同的局部最大似然树。
+[-e likelihoodEpsilon]默认值为 0.1
+[-E excludeFileName] 排除的位点文件名
+[-f a|b|c|d|e|g|h|i|j|m|n|o|p|s|t|w|x] 算法
+-f a rapid Bootstrap
+-f b draw the bipartitions using a bunch of topologies
+-f c checks if RAxML can read the alignment.
+-f d rapid hill-climbing algorithm
+-f e optimize the model parameters
+-f g compute the per–site log Likelihoods for one ore more trees passed via -z.
+-f h compute a log likelihood test (SH-test [21]) between a best tree passed via -t and a bunch of other trees passed via -z.
+-f i performs a really thorough standard bootstrap
+[-g groupingFileName] 预先分组的名称
+[-h] program options
+[-i initialRearrangementSetting] speccify an innitial rearrangement setting for the ininital phase of the search algorithm.
+[-j]
+[-k] optimize branchlength and model parameters on bootstrapped trees
+[-l sequenceSimilarityThreshold] Specify a threshold for sequence similarity clustering. [-L sequenceSimilarityThreshold]
+[-M] 模型设定
+-m GTRCAT: GTR approximation
+-m GTRMIX: Search a good topology under GTRCAT
+-m GTRGAMMA: General Time Reversible model of nucleotide subistution with the gamma model of rate heterogeneity.
+-m GTRCAT_GAMMA: Inference of the tree with site-specific evolutionary rates. 4 discrete GAMMA rates,
+-m GTRGAMMAI: Same as GTRGAMMA, but with estimate of proportion of invariable sites
+-m GTRMIXI: Same as GTRMIX, but with estimate of proportion of invariable sites.
+-m GTRCAT GAMMAI: Same as GTRCAT_GAMMA, but with estimate of proportion of invariable sites.
+-n outputFileName 输出文件名
+-o outgroupName(s) 设定外类群 如果有两个以上外类群，两者之间不能用空格，而应该用英文的"," DNA, gen1=1-500 DNA, gen2=501-1000
+[-p parsimonyRandomSeed] [-P proteinModel]
+[-q multipleModelFileName]
+-q multiple modelfile name
+如将以下信息拷贝到另存为文件 genenames
+DNA, rbcLa = 1-526
+DNA, matK = 527-1472
+调用方法 -q genenames
+-m GTRGAMMA
+[-r binaryConstraintTree]
+-s sequenceFileName 待分析的 phy 文件
+[-t userStartingTree] 用户指定的进化树拓扑结构
+[-T numberOfThreads]
+[-u multiBootstrapSearches] Specify the number of multiple BS searches per replicate to obtain betterML trees for each replicate. [-v] 版本信息
+[-w workingDirectory] 将文件写入的工作目录
+[-x rapidBootstrapRandomNumberSeed] invoke rapidBootstrap
+[-y] -y 只输出简约树拓扑结构，之后推出，该树也可以用于 GARLI 等软件
+[-z multipleTreesFile]
+[-#|-N numberOfRuns]
+生成的文件
+RAxML log.exampleRun: 运行时间、似然值/ number of checkpoint file
+RAxML result.exampleRun: 树文件
+RAxML info.exampleRun: -m GTRGAMMA or -m GTRMIX contains information about the model and algorithm used
+RAxML parsimonyTree.exampleRun: -t.
+RAxML randomTree.exampleRun: -d.
+RAxML checkpoint.exampleRun.checkpointNumber: -j
+RAxML bootstrap.exampleRun: -# and -b or -x
+RAxML bipartitions.exampleRun: -f b
+RAxML reducedList.exampleRun: -l or -L
+RAxML bipartitionFrequencies.exampleRun: -t , -z , -f m
+RAxML perSiteLLs.exampleRun: -f g
+RAxML bestTree.exampleRun: -x 12345 -f a
+RAxML distances.exampleRun: -f x 
+
+
+19.构建进化树
+1. PhyML
+构建进化树方法：Maximum Likelihood
+评估：选择bootstrap或者Likelihood-ratio test
+运行方式：所有平台和网页
+心得：理论上支持4000条序列，小于2000000个字符。但是，对于个人电脑，通常100-200条序列比较合适。命令行运行时，可以选择非常简介的默认模式运行。在默认模式下，bootstrap需要手动开启。安装和使用非常方便，直接下载后可以直接使用。同时，bootstrap可以通过MPI分布计算，但是需要从源代码安装。
+快速运行：phyml -i align_file.phy --no_memory_check
+-i：后跟需要Phylip格式文件
+--no_memory_check：不用检查内存，防止程序运行时跳出
+
+2. RAxML
+构建进化树方法：Maximum Likelihood
+运行方式：所有平台和网页。
+心得：网页运行推荐 http://www.phylo.org/portal2/login!input.action ，支持数据的存放和其他构建进化树的方法。本地安装支持MPI和PThreads的分布计算，但是安装有些复杂，需要仔细阅读文档。
+快速运行1：raxmlHPC-PTHREADS-AVX -x 12345 -p 12345 -# 100 -m GTRGAMMA -T 4 -s align_file.phy -n TEST
+-x：bootstrap运行时设定随机数，用于结果重现
+-p：parsimony推断时设定随机数，用于结果重现
+-#：bootstrap次数。也可以设定为autoMRE，最大次数是1000。
+-m：设定使用的模型，GTRGAMMA为核苷酸序列适用模型
+-T：设定线程数，不要超过最大线程
+-s：输入文件，Phylip或者fasta文件
+-n：输入文件记号
+快速运行2：raxmlHPC-PTHREADS-AVX -f a -x 12345 -p 12345 -# autoMRE -m GTRCAT -T 4 -s align_file.phy -n TEST
+-f a：选定算法，快速bootstrap
+
+20.最后产生的文件5个
+RAxML_bestTree.TEST
+RAxML_bipartitions.TEST
+RAxML_bipartitionsBranchLabels.TEST
+RAxML_bootstrap.TEST
+RAxML_info.TEST
+
+在mega中查看RAxML_bestTree.TEST的进化树结构
+==========================================================================
+Linux命令
+
+21.top 查看进程和cup占用
+22.df查看磁盘信息，df --help 
+-a, --all             include pseudo, duplicate, inaccessible file systems
+  -B, --block-size=SIZE  scale sizes by SIZE before printing them; e.g.,
+                           '-BM' prints sizes in units of 1,048,576 bytes;
+                           see SIZE format below
+  -h, --human-readable  print sizes in powers of 1024 (e.g., 1023M)
+  -H, --si              print sizes in powers of 1000 (e.g., 1.1G)
+  -i, --inodes		显示inode 信息而非块使用量
+  -k			即--block-size=1K
+  -l, --local		只显示本机的文件系统
+      --no-sync		取得使用量数据前不进行同步动作(默认)
+      --output[=FIELD_LIST]  use the output format defined by FIELD_LIST,
+                               or print all fields if FIELD_LIST is omitted.
+  -P, --portability     use the POSIX output format
+      --sync            invoke sync before getting usage info
+      --total           elide all entries insignificant to available space,
+                          and produce a grand total
+  -t, --type=TYPE       limit listing to file systems of type TYPE
+  -T, --print-type      print file system type
+  -x, --exclude-type=TYPE   limit listing to file systems not of type TYPE
+  -v                    (ignored)
+      --help		显示此帮助信息并退出
+      --version		显示版本信息并退出
+
+
+
+df -H 以G显示磁盘占用情况
+
+23.建立软链接ln -s path/ori-name path/new-name
+
+24.新建文件
+touch fileName
+vim nul>fileName
+
+25.grep文本查询
+-a 不要忽略二进制数据。
+-A<显示列数> 除了显示符合范本样式的那一行之外，并显示该行之后的内容。
+-b 在显示符合范本样式的那一行之外，并显示该行之前的内容。
+-c 计算符合范本样式的列数。
+-C<显示列数>或-<显示列数>  除了显示符合范本样式的那一列之外，并显示该列之前后的内容。
+-d<进行动作> 当指定要查找的是目录而非文件时，必须使用这项参数，否则grep命令将回报信息并停止动作。
+-e<范本样式> 指定字符串作为查找文件内容的范本样式。
+-E 将范本样式为延伸的普通表示法来使用，意味着使用能使用扩展正则表达式。
+-f<范本文件> 指定范本文件，其内容有一个或多个范本样式，让grep查找符合范本条件的文件内容，格式为每一列的范本样式。
+-F 将范本样式视为固定字符串的列表。
+-G 将范本样式视为普通的表示法来使用。
+-h 在显示符合范本样式的那一列之前，不标示该列所属的文件名称。
+-H 在显示符合范本样式的那一列之前，标示该列的文件名称。
+-i 忽略字符大小写的差别。
+-l 列出文件内容符合指定的范本样式的文件名称。
+-L 列出文件内容不符合指定的范本样式的文件名称。
+-n 在显示符合范本样式的那一列之前，标示出该列的编号。
+-q 不显示任何信息。
+-R/-r 此参数的效果和指定“-d recurse”参数相同。
+-s 不显示错误信息。
+-v 反转查找。
+-w 只显示全字符合的列。
+-x 只显示全列符合的列。
+-y 此参数效果跟“-i”相同。
+-o 只输出文件中匹配到的部分。
+文件中搜索一个单词，得到该行
+grep "match_pattern" fileName
+
+在多个文件中查找：
+grep "match_pattern" file1 file2 file3
+
+输出除之外的所有行 -v 选项：
+grep -v "match_pattern" fileName
+
+使用正则表达式 -E 选项：
+grep -E "[1-9]+"
+
+只输出文件中匹配到的部分 -o 选项：
+grep -o "match_pattern" fileName
+
+统计文件或者文本中包含匹配字符串的行数 -c 选项：
+grep -c "text" fileName
+
+grep "text" -n fileName
+grep "text" -n file1 file2
+
+搜索多个文件并查找匹配文本在哪些文件中：
+grep -l "text" file1 file2
+
+在多级目录中对文本进行递归搜索：
+grep "text" ./ -f -n
+忽略匹配样式中的字符大小写：
+grep -i "text" fileName
+
+选项 -e 制动多个匹配样式：
+grep -e "text1" -e "text2" fileName
+
+
+#只在目录中所有的.php和.html文件中递归搜索字符"main()"
+grep "main()" . -r --include *.{php,html}
+显示匹配某个结果之后的3行，使用 -A 选项：
+seq 10 | grep "5" -A 3
+显示匹配某个结果之前的3行，使用 -B 选项：
+seq 10 | grep "5" -B 3
+显示匹配某个结果的前三行和后三行，使用 -C 选项：
+seq 10 | grep "5" -C 3
 =========================================================================
 二、进化树过程
 1.step1.sh文件：核苷酸，氨基酸，genbank下载
@@ -1706,10 +2086,162 @@ du -hs *
 选定File，并把Format改为RunInfo
 点击Create File就生成了一个SraRunInfo.csv文件了 
 
+=======================================================================
+
+十一、kmer.sh和soap
+
+#$ -S /bin/sh
+mkdir K96
+SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K96/genome -K 96 -p 32
+mkdir K127
+SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K127/genome -K 127 -p 32
+
 ========================================================================
 
-十、Q20和Q30数值的判定
+十二、大型机使用
 
+1.上传文件
+scp ./test.txt miaobenben@192.168.1.5:/home/miaobenben/test
+
+2.下载文件
+scp miaobenben@192.168.1.5:/home/miaobenben/test/test.txt ./home/
+
+3.登录节点
+ssh miaobenben@192.168.1.5
+
+4.任务管理节点：负责计算任务的投放管理
+计算节点：用于任务计算，均为32核及以上CPU，最小内存2G
+
+5.集群上没有~目录，只有/home等
+
+6.任务投放与管理
+6.1 投放
+qsub -cwd -l vf=8g,p=4 -q prj.q test.sh
+-cwd 当前目录下运行，一般需要先新建这个目录
+-l vf=8g,p=4 申明需要占用8g内存，4个CPU，内存是使用可以是小数
+-q 使用队列，all.q 包含所有节点，rd.q 为rd预留节点，prj.q 为项目分析预留的节点
+注意：内存过小任务运算过程可能被自动kill；
+p参数应与程序实际使用的线程相符
+
+6.2 任务状态
+qstat 当前用户投放情况
+qstat -u "*" 查看所有用户任务
+qstat -j jobID 查看任务的详细信息
+qstat -f 查看任务状态和节点状态
+
+6.3 挂起任务
+qhold -j jobID 挂起对应任务
+qhold -u user_name 挂起某用户的所有任务
+
+6.4 任务解挂
+qrls -j jobID
+qrls -u user_name
+
+6.5 任务删除
+qdel -j jobID 
+qdel jobid
+qdel -u user_name
+
+6.6 查看节点状态 qhost
+
+=================================================================
+
+十三、比对和补gap，非鱼类线粒体
+
+1.修改bow.sh文件KQ.fa文件路径及文件名，2个fq.gz的路径及文件名,-p和-@都是CPU数量应与提交任务一致
+#$ -S /bin/sh
+/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2-build ../KQ.fa long
+/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2 -x long -1 ../01.fq/RK80404KQCGJ_DSW62564-V_1.clean.fq.gz -2 ../01.fq/RK80404KQCGJ_DSW62564-V_2.clean.fq.gz -p 25 | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > long.srt.bam 
+/hellogene/scgene01/bio/bin/samtools index long.srt.bam
+
+
+bowtie比对（严格）和remap比对（松散）
+bowtie.sh
+#$ -S /bin/sh
+if [ $# -eq 0 ]; then
+        echo "Program: Package the sequecing data and statics for mtFish sequencing"
+        echo "Usage: $0 <fasta> <fq1> <fq2>"
+        exit 1
+fi
+
+
+ref=$1
+fq1=$2
+fq2=$3
+echo '#$ -S /bin/sh' > bow.sh
+echo "/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2-build ${ref} long" >> bow.sh
+echo "/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2 -x long -1  ${fq1} -2 ${fq2} -p 25 | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > long.srt.bam " >> bow.sh
+echo  '/hellogene/scgene01/bio/bin/samtools index long.srt.bam'  >> bow.sh
+qsub -cwd -l vf=20g bow.sh
+
+remap.sh
+#$ -S /bin/sh
+if [ $# -eq 0 ]; then
+        echo "Program: Package the sequecing data and statics for mtFish sequencing"
+        echo "Usage: $0 <genome.fasta> <fq1> <fq2>"
+        exit 1
+fi
+
+
+ref=$1
+fq1=$2
+fq2=$3
+echo '#$ -S /bin/sh' > remap.sh
+echo "/hellogene/scgene01/bio/bin/bwa index ${ref}" >> remap.sh
+echo "/hellogene/scgene01/bio/bin/bwa mem -t 14 ${ref}  ${fq1} ${fq2} | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 8 - > genome.map.bam" >> remap.sh
+echo  '/hellogene/scgene01/bio/bin/samtools index genome.map.bam'  >> remap.sh
+qsub -cwd -l vf=12g remap.sh
+
+将bowtie 和remap添加在.bashrc
+alias bowtie='/home/miaobenben/sh/bowtie.sh'
+alias remap='/home/miaobenben/sh/remap.sh'
+如果遇到权限不够时需要在sh所在文件夹下修改sh的权限为777
+chmod 777 *.sh
+
+2.提交reads比对任务,产生bam文件
+qsub -cwd -l vf=18g,p=25 -q prj.q bow.sh
+
+3.查看bam文件，包括reads覆盖的效果参数
+samtools view long.srt.bam|less -S
+
+samtools view long.srt.bam |tail
+
+4.提取reads
+python spade.py long.srt.bam KQ.fa ../01.fq/RK80404KQCGJ_DSW62564-V_1.clean.fq.gz ../01.fq/RK80404KQCGJ_DSW62564-V_2.clean.fq.gz 2614600 2620500
+
+5.vim查找string
+/string
+
+vim把多个N换成1个N缩小空间
+:%s/NNNNNNNNNNNNNNNNNNNNNNNNNNNNN/N/g
+
+6.补reads
+在KQ里查找NNN区域并在其前后添加序列，记得先备份
+vim打开KQ.fa文件查找NNN，从最后开始补，这样可以同时把文件中所有的NNN区域都补一遍，如果从开头开始会因为增加序列位置改变
+在scaffold_long.fa里查找NNN区域前/后的一段序列，并把查到的结果对应前后的序列复制在KQ.fa文件里，此过程同时打开两个终端在同意目录下完成
+
+
+vim中上键和下键切换行，所以可以将找到后的序列前面或后边部分换行以复制或者替换
+由于目标序列有正向和反向同时存在，为了用补好的一小段序列来替换与它重复的序列，同时考虑正反向可以同时搜索并匹配，所有将这段补好的序列用long_seq2.py补好产生一个反向互补的序列在同一个文件中，来同时搜索正反向序列，保证原来序列中正向和反向都可以找到。
+
+7.再次reads比对和查看bam文件，用igv软件查看效果，window软件，需要将.fa .bam .bam.bai三个文件放在同一目录下导入.fa .bam文件查看，.bam.bai文件不可少
+
+======================================================================
+
+十四、从lean.fastq文件开始
+
+1.fastqc质量查看线粒体操作提交
+mkdir XXX
+cd XXX
+cp ../readsQC.py .
+mkdir 01.fq
+cd 01.fq
+ln -s /hellogene/scgene01/rawdata/SCG-80507-250/2.cleandata/s80510SJYL_DSW63405-V/*.gz .
+cd ..
+python readsQC.py step1 01.fq/*gz	#fastqc，产生相应的表格数据文件
+python readsQC.py step2 01.fq/*gz	#提交到多线程任务计算
+
+************************************************************************
 readsQC.py文件
 
 #! /usr/bin/env python
@@ -2056,26 +2588,628 @@ if __name__ == '__main__':
 		print '\033[0m'
 		exit(1)
 
-========================================================================
+*****************************************************************************
 
-十一、kmer.sh和soap
-
+2.如果任务失败
+重新改变03.ass里的-t 和-m
 #$ -S /bin/sh
-mkdir K96
-SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K96/genome -K 96 -p 32
-mkdir K127
-SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K127/genome -K 127 -p 32
+/hellogene/scgene01/opt/bin/python /hellogene/scgene01/bio/pip/ass/SPAdes-3.5.0-Linux/bin/spades.py -k 79,97 --only-assembler -1 /hellogene/scgene03/prj/SCG-80507-250/SBXZ/01.fq/s80510SBXZ_DSW63404-V_1.clean.fq.gz -2 /hellogene/scgene03/prj/SCG-80507-250/SBXZ/01.fq/s80510SBXZ_DSW63404-V_2.clean.fq.gz -t 12 -m 50 -o 03.ass/spadeAss
+
+查看新产生的03.ass中的warnings.log
+查看scaffolds.fasta文件，取前10条序列
+
+3.取前10条序列
+先取前10条ID，去除ID前的'>'，保存为list
+grep ">" scaffolds.fasta|head -n 10|awk -F '>' '{print $2}' > id.list
+安装seqtk
+sudo apt install seqtk
+使用seqtoolkit按照序列无'>'的ID选取原文件的序列并保存为fasta文件
+seqtk subseq scaffolds.fasta id.list > ten.fa
+
+4.在blastn里blast找到线粒体mitochondrial DNA的那条序列按照上面方法找出该序列单独成fa文件one.fa
+repeat-match one.fa
+结果
+Genome Length = 16810   Used 21240 internal nodes
+Long Exact Matches:
+   Start1     Start2    Length
+        1      16714        97
+
+在one.fa里复制一段开始或者末尾的序列查找重复片段，因为线粒体是环形，应该去掉一个重复才能闭合成环
+
+
+5.排序：将这条线粒体blastn，根据正向sbjct的第1位确定reque序列第1位，如果sbjct位反向，reque序列需先取反向互补后再blastn，根据sbjct确定reque第1位
+根据颜色图左边整齐则sbjct为正向，右边整齐则sbjet位反向
+
+反向互补,输出原序列和反向序列
+python V1/long_seq2.py in.fa out.fa
+去掉输出结果中原来的序列
+python V1/long_seq2.py in.fa out.fa|tail -n 2 >rv.fa
+*****************************************************************
+long_seq2.py文件
+from Bio import SeqIO
+from Bio.Seq import Seq
+import sys
+
+scgene, faf, outf=sys.argv
+file=open(faf,'r')
+out=open(outf,'w')
+for i in SeqIO.parse(file,'fasta'):
+	out.write('>%s\n%s\n' % (i.id,i.seq))
+	a=Seq(str(i.seq))
+	c=a.reverse_complement()
+	out.write('>%s\n%s\n' % (i.id,c))
+out.close()
+****************************************************************
+用反向序列再在NCBI里blast比对
+
+6.将第340位的碱基之后的序列移到第1位
+vim中3340+right移动到位置
+d$将剪切当前位置到行尾的内容
+d^将剪切当前位置到行首的内容
+d的剪切必须用p粘贴
+home键回到第一位，然后p键粘贴
+
+7.对于补了5次都无法补完成的gap需要建库然后在原始scaffold中直接找到
+从NNN区域前后各多取2000个碱基出来保存为gap.fa
+blast建库
+#python find.py seqdump.txt sequence.gff3 > seq.txt
+makeblastdb -in scaffolds.fa -dbtype nucl
+blastn
+blastn -query gap.fa -db scaffolds.fa -outfmt 6 > out.blastn
+less out.blastn
+
+
+KQ      NODE_7_length_120878_cov_148.579_ID_13  100.00  2000    0       0       1       2000    120842  118843  0.0     3694
+KQ      NODE_21_length_1862_cov_1156.19_ID_41   100.00  1501    0       0       2064    3564    362     1862    0.0     2772
+KQ      NODE_21_length_1862_cov_1156.19_ID_41   100.00  342     0       0       3722    4063    495     836     0.0     632
+序列	名	scaffold中NODE序数，长度，cov和id	相似度	序列长度	snp数量 gap数量	gap.fa开始gap.fa结束scf.fa对应开始scf.fa对应结束	e-velu  score
+
+gap.fa中1:2000都是碱基对应scaffols.fasta中120842:118843是反向序列
+由于2000之后是NNN，所以118843之后即是1，最后需要将（118843-1）：1取反向，并多取一部分，确定多取的部分在KQ.fa中NN的前部可以找到才能确定是对的
+所以需要取scaffolds.fasta中的NODE_7_length_120878_cov_148.579_ID_13序列，将NODE_7_length_120878_cov_148.579_ID_13保存为list文件，用seqtk subseq scaffolds.fasta list >one.fa
+8.取one.fa文件中1:120000个碱基，保存为新文件(before)bf.fa,取反向互补序列使用python long_step2.py bf.fa rvbf.fa
+在得到的反向序列rvbf.fa的前端的序列在KQ.fa中可以在NNN的前部找到，然后将没有的部分复制到KQ.fa中NNN的前端
+
+在第二行中可知2000:2064是NNN，所以没有匹配到，2064:3564是匹配的碱基，由于NNN只是代表gap不代表数量，所以对应的362前面的361个碱基需要复制到ＫＱ.fa中NNN的后端，取scaffolds.fa中NODE_21_length_1862_cov_1156.19_ID_41的1:361个碱基，由于2064:3564和362:1862都是正向，所以直接复制给KQ.fa的NNN的后端
+
+此时NNN还不能删除，需要再用bowtie KQ.fa ../*1*.tar.gz ../*2*.fq.gz比对
+然后用python spade.py long.srt.bam KQ.fa ../*1*.tar.gz ../*2*.fq.gz 0 1000(1,2文件需要具体修改，0到1000需要根据具体NNN所以位置前后500的范围）
+再将scaffolds_long.fasta 与KQ.fa文件搜索补gap，一般需要2次
+
+当只剩下尾部NNN时，需要将首都10kb放在尾部N的后端进行比对并补gap
+如果尾部没有NNN也要先在尾部加多个NNN然后将首部的10kb放在尾端比对并补gap
+
+=====================================================================
+
+十五、线粒体注释
+
+1. 以某处作为工作目录
+mkdir -p anote/mf anote/sub
+# mkdir -p 可以递归建文件
+2. 将组装好的 fasta 文件 cp 到 mf 中
+3. 进入 mitofish 官网(http://mitofish.aori.u-tokyo.ac.jp/),在网页右侧栏找到
+Annotate Mitogenome,上传序列,待网站预测完后下载注释结果到 mf 文件夹下,
+并解压
+4. 修改一下 step1.sh 中的内容
+cd mf
+cp ~/bio/MTG/step1.sh .
+vim step1.sh
+python ~/bio/MTG/mitofish2tbl_2.py C405565.txt C405565_genes.fa XX > t.tbl;
+sh ~/bio/MTG/anal.sh C405565_rotated.fa t.tbl
+# 强调:只修改标红处!请勿删除_genes.fa 以及_rotated.fa,最终结果是每处对
+应 mf 目录下的相应文件。XX 是物种名,为两个用下划线连接的单词,格式如
+下 Carassius_auratus
+修改完成后,
+sh step1.sh
+注意：
+xx.fa文件与相似种序列排序一定要注意正确第一位对应第一位，否则再次blastn时相似物种的query和sbjct会错位，这时python MTG/genBankRead.py xxxxxxxx.gb > xxxxxxxx.xls注释这一步会报错。
+如果是这个报错：
+Traceback (most recent call last):
+  File "/home/miaobenben/bio/MTG/geneinfo08_1.py", line 171, in <module>
+    ReadGenbank(gbf).getStats()
+  File "/home/miaobenben/bio/MTG/geneinfo08_1.py", line 68, in getStats
+    element.append(feature.qualifiers['gene'][0][:8])
+KeyError: 'gene'
+则说明找到的近缘物种的genbank文件里没有gene这一项，需要下载其他的有gene这一项的近缘物种的genbank文件
+'''*****************************************************************************	     
+				   last edit: 2015.11.02		   
+*****************************************************************************'''
+from Bio import SeqIO
+from Bio.SeqUtils import GC
+import sys
+import re
+from xlwt import Workbook,XFStyle,Borders
+import xlwt
+(xx,gbf)=sys.argv
+
+TRNA={"Ala":"A","Arg":"R","Asp":"D","Cys":"C","Gln":"Q","Glu":"E","His":"H","Ile":"I","Gly":"G","Asn":"N","Leu":"L",
+"Lys":"K","Met":"M","Phe":"F","Pro":"P","Ser":"S","Thr":"T","Trp":"W","Tyr":"Y","Val":"V","Sec":"U"," ":""}
+base={'A':'T','a':'T','T':'A','t':'A','G':'C','g':'C','C':'G','c':'G'}
+
+class ReadGenbank:
+        gbfile=''
+        refile=None
+        def __init__(self,gbfile):
+                self.gbfile=gbfile
+                self.refile=SeqIO.read(self.gbfile,'gb')
+        
+        def getStats(self):
+                element=[]
+                onelettercode=[]
+                codetype=[]
+                size=[]
+                GCpercent=[]
+                beginend=[]
+                fromto=[]
+                No_ofAA=[]
+                initiation=[]
+                termination=[]
+                anticode=[]
+                geneperiod=[]
+                intervening=[]
+                intergen=[]
+                for feature in self.refile.features:
+                        seq=''
+                        gc=0
+                        beginend=[]
+                        figure=re.findall(r'\d+',str(feature.location))
+                        symbol=re.findall(r'[\+\-]',str(feature.location))[0]
+                        chaintype='H' if symbol=='+' else 'L'
+                        
+                        for j in range(len(figure)/2):
+                                beginend.append((int(figure[j*2])+1,int(figure[j*2+1])))
+                                seq+=self.refile.seq[int(figure[j*2]):int(figure[j*2+1])]
+                        gc=round(GC(seq),2)/100
+                        
+                        if feature.type=='gene':
+                                geneperiod.append([int(figure[0]),int(figure[1])])
+                                
+                        if feature.type=='CDS':
+                                element.append(feature.qualifiers['gene'][0])
+                                onelettercode.append(' ')
+                                codetype.append(chaintype)
+                                size.append(len(seq))
+                                AAnum=len(seq)/3-1 if len(seq)%3==0 else len(seq)/3
+                                No_ofAA.append(AAnum)
+                                GCpercent.append(gc)
+                                fromto.append(beginend)
+                                initiation.append(self.extractCodon(seq,symbol)[0])
+                                termination.append(self.extractCodon(seq,symbol)[1])
+                                anticode.append(' ')
+
+                        if feature.type=='tRNA':
+                                element.append(feature.qualifiers['product'][0][:8])
+                                aa=re.findall(r'\w+',str(feature.qualifiers['product'][0]))[1]
+                                onelettercode.append(TRNA[aa])
+                                codetype.append(chaintype)
+                                size.append(len(seq))
+                                No_ofAA.append(' ')
+                                GCpercent.append(gc)
+                                fromto.append(beginend)
+                                initiation.append(' ')
+                                termination.append(' ')
+				# 2015.11.02 change feature.qualifiers['note'][0])>>>feature.qualifiers['gene'][0])
+				genecode=re.findall(r'\w+',str(feature.qualifiers['product'][0]))
+				# 2015.10.23 change anticode.append(anti[-1])>>>anticode.append(genecode[-1])
+                                # anti=re.findall(r'\w+',str(feature.qualifiers['note'][0]))
+                                anticode.append(genecode[-1])
+                                
+                        if feature.type=='rRNA':
+                                element.append(feature.qualifiers['product'][0])
+                                onelettercode.append(' ')
+                                codetype.append(chaintype)
+                                size.append(len(seq))
+                                No_ofAA.append(' ')
+                                GCpercent.append(gc)
+                                fromto.append(beginend)
+                                initiation.append(' ')
+                                termination.append(' ')
+                                anticode.append(' ')
+
+		# if intervening over the range of int, then throw a warn
+                for i in range(1,len(geneperiod)):
+			intervening.append(geneperiod[i][0]-geneperiod[i-1][1])
+			if geneperiod[i][0]-geneperiod[i-1][1]<32766:
+                                intergen.append(str(self.refile.seq[geneperiod[i-1][1]:geneperiod[i][0]]))                                
+			else: intergen.append('too long, over the range of int')	
+                intervening.append(len(self.refile.seq)-geneperiod[-1][1])
+		if len(self.refile.seq)-geneperiod[-1][1]<32766:
+	                intergen.append(str(self.refile.seq[geneperiod[-1][1]:]))
+		else: intergen.append('too long, over the range of int')
+
+                workbook=xlwt.Workbook()
+                sheet1=workbook.add_sheet('Genome Base Content',cell_overwrite_ok=True)
+                # 2015.10.23 exchange 'InterveningSequence','IntergenicNucleotides'>>>'IntergenicNucleotides','InterveningSequence'
+                title=['Gene/element','OneLetterCode','From','To','Size','GC_Percent','Codetype','No. of AA',
+                       'InferredInitiationCoden','InferredTermination','Anti-Coden','IntergenicNucleotides',
+                       'InterveningSequence']
+                fromcol=[]
+                tocol=[]
+                t=0
+                for i in range(len(element)):
+                        for j in range(len(fromto[i])):
+                                fromcol.append(fromto[i][j][0])
+                                tocol.append(fromto[i][j][1])
+
+                                # 2015.10.22 (i+j)>>>t
+                                if j!=0:
+                                        element.insert(t,' ')
+                                        onelettercode.insert(t,' ')
+                                        size.insert(t,' ')
+                                        GCpercent.insert(t,' ')
+                                        codetype.insert(t,' ')
+                                        No_ofAA.insert(t,' ')
+                                        initiation.insert(t,' ')
+                                        termination.insert(t,' ')
+                                        anticode.insert(t,' ')
+                                        intervening.insert(t,' ')
+                                        intergen.insert(t,' ')                                        
+                                t+=1
+
+                for i in range(t):
+                        sheet1.write(i+1,0,element[i])
+                        sheet1.write(i+1,1,onelettercode[i])
+                        sheet1.write(i+1,2,fromcol[i])
+                        sheet1.write(i+1,3,tocol[i])
+                        sheet1.write(i+1,4,size[i])
+                        sheet1.write(i+1,5,GCpercent[i])
+                        sheet1.write(i+1,6,codetype[i])
+                        sheet1.write(i+1,7,No_ofAA[i])
+                        sheet1.write(i+1,8,initiation[i])
+                        sheet1.write(i+1,9,termination[i])
+                        sheet1.write(i+1,10,anticode[i])
+                        sheet1.write(i+1,11,intervening[i])
+                        sheet1.write(i+1,12,intergen[i])
+                            
+                for i in range(len(title)):
+                        sheet1.write(0,i,title[i])                        
+                workbook.save('Gene_Information.xls')
+
+        def extractCodon(self,seq='',symbol='-'):
+                if symbol=='-':
+                        sequence=''
+                        inverseq=seq[::-1]
+                        for i in inverseq:
+                                if i in base:
+                                        sequence+=base[i]
+                                else:
+                                        sequence+=i
+                        start=str(sequence[:3])
+                        end=str(sequence[-3:]) if len(sequence)%3==0 else str(sequence[-(len(sequence)%3):])
+                else:
+                        start=str(seq[:3])
+                        end=str(seq[-3:]) if len(seq)%3==0 else str(seq[-(len(seq)%3):])
+                return [start,end]
+
+ReadGenbank(gbf).getStats()
+
+经过修改geneinfo08_1.py文件，命令如下产生Gene_Information.xls
+python geneinfo08_1.py NC_037044.gb
+(根据查找，一般NC_的序列在source下面有gene一项，此处需要用NC_的gb文件，否则会报错）
+
+
+sequin是一个窗口程序先安装下面程序
+sudo apt install ncbi-tools-x11
+
+5. 请对照近缘物种 genbank 生成的表格,认真检查上步运行生成的 xls 表格,此
+处认真检查可省去下游分析重复工作!
+近缘物种表格生成步骤:
+将xxx.fa 文件放到 NCBI 上, blastn 找到最近的近缘物种,下载下来 genbank
+文件,运行
+python ~/bio/MTG/genBankRead.py xxxxxxxx.gb > xxxxxxxx.xls
+# *.gb 是近缘物种 genbank 文件
+# AA.xls 中 AA 是这个近缘物种的 Accession number
+如果各近缘物种相差较大需要手动注释,再修改 t.tbl 文件
+
+6.对比产生的两个表格中No. of AA和Amino Acids (aa)是否相同
+如果不相同则需要将xxx.fa上传到orf finder网站查看
+from和to的序列范围根据表格中的from和to确定，然后根据相似物种的genbank中的tranlate table=2则使用的是第2套密码子，则genetic code选择第2项的vertebarate mitochondrial
+orf start codon to use选择"ATG" and alternative initiation codons
+然后submit提交
+
+在新的orf页面，一般选择第1条包含序列最好的结果，此处一般选择nr而不同prot然后直接blast，勾选方框可在新的页面blast结果
+
+在下方的相似序列中，如果query和sbjct前段和最后段对应则表示没有问题，如果不对应需要先判断是否正向序列，然后根据正反序列和氨基酸代码调整query的序列，注意1个氨基酸对应3个核苷酸，这里调整是query前或后，增或减都是直接调整from和to即可
+
+
+=================================================================================
+BioSoftWare
+
+ncbi-tool(asn2all)				awk
+sra-toolkit(fastq-dump)
+r-base
+scala
 
 
 
+1install					MECAT-master
+2python						MeV_4_8_1
+3sh						MISA
+4portable					mito_report
+5jar						mothur
+6perl						mrbayes-3.1.2
+7web						mrbayes-3.2.6					MTG
+amos-3.1.0					MUMmer3.23
+APBS-1.5-linux64				ncbi-blast-2.2.31+
+arachne-46233					ncbi-blast-2.7.1+
+art_src_ChocolateCherryCake_Linux		networkx-1.10rc2
+auto_barcode-master				NGSQCToolkit_v2.3.3
+bamtools					NPDtools-2.1.0-Linux
+BarcodeSplitter-master				numpy-1.9.2
+bcftools-1.2					OGDraw
+BEAST						perl-5.26.0
+bedtools2					perlprimer-1.1.21
+bfc						perl-tk-master
+bio						phylip-3.695.zip
+BioList						phylobayes4.1b
+bioperl-1.5.2_102				picard-tools-1.119
+biopython-1.63					plann-1.1
+biopython-1.65					Primer
+blasr						primer3-2.2.0-alpha
+blast						primer3-2.4.0
+bowtie-1.1.2					primer3-py
+bowtie2-2.2.5					primer_design
+breakdancer-1.1.2				psycopg2-2.6.1
+broadinstitute-picard-c8c9f58			pygraphviz-1.3rc2
+bwa-0.7.17					pysam-0.7.8
+CCT						pysam-0.8.3
+Circleator-1.0.0rc4				Python-2.7.10
+clustalw-2.1					quast-4.6.3
+CMA						R
+codonW						R-3.4.0
+data						RasMol-2.7.5.2
+DEXTRACTOR					rdflib
+EMBOSS-6.6.0					rnaQUAST-1.5.1
+errmsg						rpy2-2.3.9
+ez_setup-0.9					RSEM-1.3.0
+fa2txt						RSeQC-2.6.2
+FALCON						RVboost_0.1
+FastQC						samtools-0.1.19
+fastq-tools					samtools-1.2
+FastUnifrac					samtools-1.8
+fastx_toolkit					seqtk
+FLASH-1.2.11					seqtk.git
+forTrinity					sequin.linux
+fqtools						setuptools-18.0.1
+fqtrim-0.9.4					share
+FragGeneScan1.20				SOAPdenovo
+gatk						software
+GATK						SPAdes-3.12.0-Linux
+gff3-0.2.0					sratoolkit.2.5.2-centos_linux64
+glibc-2.15					standard-RAxML-8.2.11
+gwyddion-2.50					SVDetect_r0.8b
+hdf5-1.8.16					szip-2.1
+hdf5-1.8.16-linux-centos6-x86_64-gcc447-shared	tbl2asn
+hdf5-1.8.19					testData
+hdf5-1.8.4.snap19-1.el5.x86_64.rpm		treegrahp
+htsbox						TreeView-1.1.6r4-bin
+htsbox-lite					trinityrnaseq-Trinity-v2.5.1
+igrec-3.1.1-Linux				Trinotate-2.0.2
+IGV_2.3.55					tRNAscan-SE-1.3.1
+images						V1
+jellyfish-2.2.5					V2
+jmodeltest-2.1.10				VarScan.v2.3.9.jar
+jmol-14.29.16					vsearch-1.11.1
+jpeg-6b						web.py-0.37
+kalign-1.04					wgsim
+kmer_project					xerces-c-3.1.1
+Lighter						xlrd-0.9.4
+linux.gtk.x86_64				xlutils-1.7.1
+list.txt					xlwt-0.7.5
+mafft-7.245-with-extensions			xlwt-future-0.8.0
+maker						y-tools-3.1.1
+matplotlib-1.4.3				zlib-1.2.8
+mauve_snapshot_2015-02-13
 
 
+***********************************************************************************************************************************************************
+软件使用
+
+1.测序——生成色谱图(峰图文件）（SCF，ABI和预先处理的ESD格式）——得出相应的碱基和质量数（碱基测序质量值Q和碱基出错的概率Pe）——输出fasta格式或者XBAP，PHD，SCF
+
+2.文件格式
+Phd文件，用于组装后consed查看编辑；fasta文件为核算序列文件；fasta格式的质量文件
+
+3.Phd2Fasta格式转换
+是phred软件包的一部分，将phred产生的phd文件转换成fasta格式的核酸和质量文件，便于crossmatch和phrap程序编辑。
+
+4.载体屏蔽Crossmatch
+用于比对两套DNA序列，可以用来找出序列中的载体序列，产生屏蔽了载体的序列，也可用于cDNA和cosmid的比对，相比blastn速度较慢但敏感度高（因允许gap存在）
+
+5.Phrap
+华盛顿大学分子生物技术学院的软件包，主要用于shotgun序列的组装。允许使用全长的序列，不仅仅是高质量部分；使用质量信息进行组装提高组装的准确度；能够处理比较大的数据集。
+
+6.Cap3
+用于核酸序列拼接的软件，应用正反向信息更正拼接错误，链接contigs；在序列拼接中应用reads的质量信息；自动去reads5'端和3'端低质量区；产生consed程序可读的ace格式拼接结果文件；能用于staden软件包中的cap4软件。
+
+7.Consed
+非常强大的图形化finish软件，进行组装的各项统计并绘图，对结果进行比对分析，实现对组装结果进行拆分，重组等功能。
+
+8.primer3
+做PCR印务设计，能够比较严格的控制印务发夹结构和二聚体，适合作大规模的PCR引物设计。
+
+9.序列比对
+9.1全局比对
+Clustalw
+核酸、蛋白质的全局比对，为构建分子进化树分析提供基础，
+
+10.cpAno/cleanCP2.py
+叶绿体注释结果文件*.fas和*.gff转成t.tbl和error.log文件
+python cpAno/cleanCP2.py *.fas *.gff 1>t.tbl 2>error.log
+
+11.Sequin
+asn文件放到Sequin里边去，再选择error，之后export出来，之后最好的确定ORF的方法是直接在Sequin中Annotate菜单 -> ORF Finder
+
+12.readsQC.py
+python readsQC.py step1 *.gz
+将所有原始fq文件的gz文件处理生成.qc文件夹，查看生成的Basicinfo.xls中GC,Q20,Q30和RepRate的值，如果Q30的之少于80%，则需要去除质量不好的reads。
+
+python readsQC.py step2 01.fq/R*
+组装过程
+
+13.Trimmomatic
+sudo java -jar trimmomatic-0.36.jar PE -threads 12 -phred64 R1.fq R2.fq R1.fa R1_r.fa R2.fa R2_r.fa AVGQUAL:1
+用Trimmomatic取出低质量的reads，剪切reads，完成后把R1.fa和R2.fa 重新运行qc一步readsQC.py ，如Q30的值没问题即可继续．
+
+Trimmomatic的用法：
+java -jar /sam/trimmomatic/trimmomatic-0.32.jar PE -threads 12 -phred64 -trimlog logfile input_forward.fq input_reverse.fq output_forward_paired.fq output_forward_unpaired.fq output_reverse_paired.fq output_reverse_unpaired.fq ILLUMINACLIP:1.adapter.list:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+同一个指令下的不同参数可以用':'来界定
+phred33    设置碱基的质量格式,如果不设置，默认的是-phred64
+trimlog file就是产生日志，包括如下部分内容：read的名字，留下来的序列的长度，第一个碱基的起始位置，从开始trimmed的长度，最后的一个碱基位于初始read的位置，最后trimmed的数量，其他步骤产生的日志
+LEADING:3   切除首端碱基质量小于3的碱基或者N
+TRAILING:3   切除末端碱基质量小于3的碱基或者
+ILLUMINACLIP: 1.adapter.lis:2:30:10 1.adapter.list为adapter文件，允许的最大mismatch 数，palindrome模式下匹配碱基数阈值：simple模式下的匹配碱基数阈值
+SLIDINGWINDOW:4:15  Windows的size是4个碱基，其平均碱基质量小于15，则切除
+MINLEN:36  最低reads长度为36
+CROP:  保留的reads长度
+HEADCROP: 在reads的首端切除指定的长度
+下载地址：http://www.usadellab.org/cms/?page=trimmomatic （注意里面download那里，选择source和binary）
+
+14.canu
+大的全基因组的组装（有三代和二代的数据），先用canu组装（纯三代reads组装），然后再用pilon（https://github.com/broadinstitute/pilon/wiki）去补gap和修正snp，indel。
+
+15.普通鱼类线粒体基因组QC流程
+一般鱼类(脊椎动物)有:13 个编码基因,22 个 tRNA,2 个 rRNA,1 个 D-loop
+区。
+
+16.Annotation 中 figure 图 QC 点
+1、 确定 figure 图是否有 pdf,png,tif 格式;
+2、 确定 figure 图中是否有箭头标注方向;
+3、 物种拉丁名是否是斜粗体,且在内圈里;
+4、 D-LOOP 区是否标出,如果注释结果是 misc-featrue,圈图中也要标出。
+
+17.pilon-1.22.jar
+java -Xmx100G -jar /hellogene/scgene02/RD/RiceHybridDenovo/bin/pilon-1.22.jar --genome ../index/rice.unitigs.fasta --frags ../mem/unitigs.sort.bam --output unitigs
+用pilon补SNP和gap
+
+18.kmer的值
+由于进行的是低深度的测序，所以一般情况下kmer不适宜设计过大，一般不建议超过55。具体kmer设多大，可以根据jellyfish跑出来的kmer分布图确认基因组大小后再设kmer的值，也可通过参考近缘物种的基因组大小进行设置。
+
+19.assemble.sh组装程序：
+/hellogene/scgene03/RD/RADPlus/1assemble/assemble.sh
+内容：
+#$ -S /bin/sh
+/hellogene/scgene03/RD/RADPlus/bin/SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-63mer all -s assemble.conf -o gyGenome -K 43 -p 32
+
+20.spade.sh
+#$ -S /bin/sh
+/hellogene/scgene01/opt/bin/python /hellogene/scgene01/bio/pip/ass/SPAdes-3.5.0-Linux/bin/spades.py -k 79,97 --only-assembler -1 /hellogene/scgene02/prj/SCG-61021-169AB/HB/01.fq/1.fq -2 /hellogene/scgene02/prj/SCG-61021-169AB/HB/01.fq/2.fq -t 15 -m 30 -o /hellogene/scgene02/prj/SCG-61021-169AB/HB/03.ass/spade_text/spadeAss
+
+21.r.mp.sh
+/hellogene/scgene01/bio/bin/bwa mem -t 14 HB.fa ../../01.fq/51112SYH_L6_I376.R1.clean.fastq.gz ../../01.fq/51112SYH_L6_I376.R2.clean.fastq.gz | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 8 -  genome.map
+/hellogene/scgene01/bio/bin/samtools stats genome.map.bam | grep ^COV | cut -f 2- > map.cov
+/hellogene/scgene01/bio/bin/samtools depth genome.map.bam > map.dp
+/hellogene/scgene01/bio/bin/samtools index genome.map.bam 
+
+22.jellyfish统计基因组大小
+/hellogene/scgene01/bio/bin/jellyfish count -C *.fq -m 21 -s 100M -t 24 -o kmer_count
+
+#-C后面可接几个fa或者fq文件
+大型机上面用which jellyfish 的地址是错误的，是在/hellogene/scgene01/bio/bin/jellyfish 而不是/hellogene/scgene01/opt/bin/jellyfish
+
+然后/hellogene/scgene01/bio/bin/jellyfish histo kmer_count > histo.txt
+
+再打开histo.txt文件，找出第二列出现第一个最低值后出现的最大值，给出第一列的值x。
+
+把总的碱基的数量除以x得到基因组大小。统计输入的fq文件的行数y，然后计算y/4*2*150/x 出来的值就是预计的基因组大小（如太小则可能是fq的q质量过低，应先去除低质量的reads）
+
+23.CASAVA
+Illumina高通量测序结果最初以原始图像数据文件存在，经CASAVA软件进行碱基识别（Base Calling）后转化为原始测序序列（Raw Reads）
+
+24.NCBI 提交
+将已完成的基因组序列和基因注释，按照NCBI要求制作成可以直接提交NCBI的序列文件，直接将 submit2ncbi目录中的SQN文件以附件的形式发送给NCBI官方邮箱（gb-sub@ncbi.nlm.nih.gov），即完成提交。
+NCBI提交相关文件请查看“Submit 2 NCBI”文件夹。、
+生成的NCBI提交文件默认是提交并通过审核后就马上公开该序列，这个过程一般需要1到2个月的时间，如果希望在确定的时间公布该序列，请联系我们修改发布时间后，再做提交。
+
+25.Codon Usage分析
+线粒体密码子的使用具有偏好性（Codon Usage Bias），密码子偏好性在一定程度上会影响基因的表达和反映物种的进化关系[28]。利用SCGene整合的Codon Usage分析流程，对Hariotina reticulata线粒体基因组64种密码子的使用进行统计
+
+26.sequencing
+质量检测
+
+27.chloroplast & mitochondrion assemble（CMA）
+序列捕获,基因组组装与验证
+
+28.blastn & blastx (NCBI)
+基因组注释
+
+MiTFi(University of Leipzig)
+基因组注释
+
+tRNAscan-SE(UCSC)
+基因组注释
+
+OGDRAW(Max Planck Institute)
+基因组注释
+
+29.tbl2asn & sequin(NCBI)
+基因序列提交
+
+30.Mega6 Mega7
+进化分析
+
+31.MUSCLE
+进化分析
+
+32.jModelTest
+进化分析
+
+33.RAxML
+进化分析
+
+34.Clustal Omega
+基因差异比较分析
+
+35.fa2plyp.py
+python fa2plyp.py dna.fa dna.phy
+将fasta格式转化为phylip格式
+
+36.多序列比对软件对比
+如果选择用RAxML来建ML树，则需用MEGA进行比对后再转化为phylip格式（*.phy），RAxML只能识别这种比对格式文件。
+
+MEGA比对掐头去尾后输出FASTA格式（*.fas）文件（同时也要生成*.nex格式文件用于后期检测饱和度）
+
+将fasta格式转化为phylip格式
+python fa2plyp.py dna.fa dna.phy
+
+ClustalX和集群上cds.sh中muscle只能比对但不能掐头去尾，可以使用ClustalX转化为*.phy格式文件。
+
+打开ClustalX，File-> Load Seqences将MEGA产生的文件载入-> 菜单栏Alignment-> Output Format Options-> Output Files下改选PHYLIP format-> 菜单栏Alignment ->Do Complete Alignment -> OK
+
+37.建ML树
+可选软件有RAxML，Treefinder, Phyml(据说是最快的进化ML树的软件)，Garli。综合软件有PHYLIP，MEGA，PAUP。（虽然MEGA也可以做ML，但模型太少，不建议。）
+在集群上我们使用的RAxML。
+
+37.1.1核苷酸树如下：
+#$ -S /bin/sh
+evolution/raxml -s nucl.phy -m GTRGAMMAI -f a -N 1000 -T 8 -x 855500 -p 23444 -n dna_b1000
+# -m 后接4.2算出的最佳模型
+# -t 后接cpu数
+保存后，用qsub -cwd -l vf=10G ml.dna.sh抛到集群去运算
+如果有报错，错误原因会写在“*.o*”的文件中。
+
+37.1.2氨基酸树则如下：
+#$ -S /bin/sh
+evolution/raxml -s aa.phy -m PROTGAMMAILGF -f a -N 1000 -T 15 -x 855500 -p 23444 -n dna_b1000
+#LG 换成MTMAM（最佳模型为MtMam+I+G+F)
+
+37.2vim建一个名为ch.sh的脚本，脚本里写
+#$ -S /bin/sh
+cp RAxML_bipartitionsBranchLabels.dna_b1000  tree.nwk
+awk '{print $1,$2,$3}' taxonomy.info.xls | while read a b c ;do echo "sed -i \"s/${b}_$c/'${b} $c ($a)'/\" tree.nwk ";done > s.sh
+Taxonomy.info.xls是t.info时要注意物种名是否有更改，如是tox.xls则要注意是否需要NC号后面的.1
+# 执行完生成一个原始的tree.nwk和s.sh文件
+sh s.sh 
+# 运行生成的s.sh 修改成最后的tree.nwk文件
+
+37.3
+把tree.nwk文件导入mega中进行树的可视化修改。
+有关Bootstrap和Jackknifing
+bootstrap:以每一列为单位，随机排放各列(行的长度始终相等)，产生不同的多序列
+jackknifing:随机取一半，再随机取一半的一半，再随机取一半的一半的一半
 
 
-
-
-
-
+*********************************************************************************
 
 
 

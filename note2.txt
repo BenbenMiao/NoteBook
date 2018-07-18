@@ -1,0 +1,1623 @@
+一、根据分子标记建ML树的流程
+1.确定外群（outgroup）
+2.确定分子标记(此例为cox1)
+3.根据物种accession列，生成t.info文件（accession number和物种名用Tab键格开）
+4.根据t.info文件下载（包括outgroup物种）和目标物种cds多序列文件
+mkdir cds
+awk ‘{print $1}’t.info | while read a; do asn2all -r -A $a -o cds/$a.cds -f d; done
+
+5.将目标物种cds多序列文件放到cds目录下，这时所有物种的序列都在一起进行分析
+6.这时会将cds文件夹下各文件中cox1提取出来，在当前目录下生成一个cox1.fsa的文件
+python ~/luria/getcox1_V2.py cds
+#cds是cds文件存放的文件夹
+
+7.多序列比对：如果选择用RAxML来建ML树，则需用MEGA进行比对后再转化为phylip格式（*.phy），RAxML只能识别这种比对格式文件，MEGA比对掐头去尾后输出FASTA格式（*.fas）文件（同时也要生成*.nex格式文件用于后期检测饱和度）
+8.将fasta文件转为phy文件格式
+python fa2plyp.py dna.fa dna.phy
+fa2plyp.py文件：
+import os
+import sys
+import re
+(xx,a,b)=sys.argv
+with open(a ,'r') as fin:
+    sequences = [(m.group(1), ''.join(m.group(2).split()))
+    for m in re.finditer(r'(?m)^>([^ \n]+)[^\n]*([^>]*)', fin.read())]
+with open(b, 'w') as fout:
+    fout.write('%d %d\n' % (len(sequences), len(sequences[0][1])))
+    for item in sequences:
+        fout.write('%-14s %s\n' % item)
+
+9.替代饱和检测
+10.最佳替代模型的选择
+11.建ML树，可选软件有RAxML，Treefinder, Phyml(据说是最快的进化ML树的软件)，Garli。综合软件有PHYLIP，MEGA，PAUP。（虽然MEGA也可以做ML，但模型太少，不建议。）在集群上我们使用的RAxML。
+12.核苷酸进化树如下:
+vim建一个名为ml.dna.sh的脚本，脚本里写
+ml.dna.sh文件：
+#$ -S /bin/sh
+/evolution/raxml -s nucl.phy -m GTRGAMMAI -f a -N 1000 -T 8 -x 855500 -p 23444 -n dna_b1000
+#evolution/raxml是raxml软件的安装目录的命令，nucl.phy是核苷酸转成的phylip文件，GTRGAMMAI表示最优模型为GTR+GAMMA+I,-m 后接算出的最佳模型-t 后接cpu数，保存后，用qsub -cwd -l vf=10G ml.dna.sh抛到集群去运算如果有报错，错误原因会写在“*.o*”的文件中。
+
+如是氨基酸树则如下：
+#$ -S /bin/sh
+/evolution/raxml -s aa.phy -m PROTGAMMAILGF -f a -N 1000 -T 15 -x 855500 -p 23444 -n dna_b1000
+#evolution/raxml是raxml软件的安装目录的命令，nucl.phy是氨基酸序列转成的phylip文件，PROTGAMMAILGF表示最优模型为MtMam+I+G+F,-m 后接算出的最佳模型-t 后接cpu数，保存后，用qsub -cwd -l vf=10G ml.dna.sh抛到集群去运算如果有报错，错误原因会写在“*.o*”的文件中。
+
+13.将accession号替换为物种名
+vim建一个名为ch.sh的脚本，脚本里写
+#$ -S /bin/sh
+cp RAxML_bipartitionsBranchLabels.dna_b1000  tree.nwk
+awk '{print $1,$2,$3}' t.info | while read a b c ;do echo "sed -i \"s/${a}/'${b} $c ($a)'/\" tree.nwk ";done > s.sh
+#Taxonomy.info.xls是t.info时要注意物种名是否有更改，如是tox.xls则要注意是否需要NC号后面的.1，执行完生成一个原始的tree.nwk和s.sh文件
+
+14.把tree.nwk文件导入mega中进行树的可视化修改
+有关Bootstrap和Jackknifing
+bootstrap:以每一列为单位，随机排放各列(行的长度始终相等)，产生不同的多序列
+jackknifing:随机取一半，再随机取一半的一半，再随机取一半的一半的一半...
+
+=========================================================================
+二、进化树过程
+1.step1.sh文件：核苷酸，氨基酸，genbank下载
+#! -S /bin/sh
+#新建对应文件夹
+mkdir -p tox/gb nucl/nucl aa/aa
+
+cd tox/gb
+#根据accession列下载genbank文件,id.list和t.info不同之处在于t.info有第二列的物种名而原始的list只有accession且不包括目标种
+awk '{print $1}' id.list | while read a; do asn2all -r -A $a -f g > $a.gb; done
+#将目标种的.sqn文件转为genbank文件格式，这样就避开用目标种的accession下载序列
+asn2all -i ../../*.sqn -f g > submitID.gb
+#getTox是根据genbank文件生成tox.xls汇总表，前两列是accession和物种名
+python ../../Phylotools/getTox_2.py *
+mv tox.xls ../
+cd ../../
+
+cd nucl/
+#下载核苷酸序列文件
+awk '{print $1}' ../t.info | while read a; do asn2all -r -A $a -o nucl/$a.nucl -f d; done
+#将目标种的.sqn文件转为核苷酸文件格式
+asn2all -i *.sqn -o nucl/nucl/submitID.nucl -f d
+cd ..
+
+cd aa/
+#下载氨基酸序列文件
+awk '{print $1}' ../t.info | while read a; do asn2all -r -A $a -v aa/$a.aa -f d; done
+#将目标种的.sqn文件转为氨基酸文件格式
+asn2all -i *.sqn -v aa/aa/submitID.aa -f d
+cd ..
+
+******
+2.step2.sh文件,muscle比对
+#! /bin/sh
+cd nucl/nucl
+#取出不同物种相同的基因序列放在同一文件中，1和2是选项参数，一般的物种有13种基因类型，所以产生13个文件
+13种基因（ND1,,,
+python ../../Phylotools/preTree4nucl.py ../../t.info 1
+#muscle比对
+ls *.fa | while read l;do muscle -in $l -out $l.ms;done
+#生成用于建进化树的核苷酸fsa文件
+python ../../Phylotools/preTree4nucl.py ../../t.info 2 > nucl.fsa
+cd ../../
+
+cd aa/aa
+#取出不同物种相同的氨基酸序列放在同一文件中，1和2是选项参数
+python ../../Phylotools/preTree4aa.py ../../t.info 1
+#muscle比对
+ls *.fa | while read l;do muscle -in $l -out $l.ms;done
+#生成用于建进化树的氨基酸fsa文件
+python ../../Phylotools/preTree4aa.py ../../t.info 2 > aa.fsa
+cd ../../
+
+#创建用核苷酸和氨基酸建进化树的文件夹
+mkdir aa/gblocks
+mkdir nucl/gblocks
+cp aa/aa/aa.fsa aa/gblocks
+cp nucl/nucl/nucl.fsa nucl/gblocks
+
+cd nucl/gblocks
+#将fasta格式的文件转化为phylip格式的文件，用于建立进化树
+python ../../evolution/fa2plyp.py nucl.fsa nucl.phy
+cp ../../Phylotools/modeltest.sh .
+#在大型机上使用modeltest对核苷酸建立模型之后选择最优模型
+qsub -cwd -l vf=55g modeltest.sh
+cd ../../
+
+cd aa/gblocks
+#将fasta格式的文件转化为phylip格式的文件，用于建立进化树
+python ../../evolution/fa2plyp.py aa.fsa aa.phy
+cp ../../Phylotools/prottest.sh .
+#在大型机上使用prottest对氨基酸建立模型之后选择最优模型
+qsub -cwd -l vf=55g prottest.sh
+cd ../../
+
+step3.sh文件，
+#! -S /bin/sh
+cd aa/gblocks
+cp RAxML_bipartitionsBranchLabels.dna_b1000 ML_aa.nwk
+#将accession号改为对应的物种名
+awk -F '\t' '{print $1,$2}' ../../t.info | while read a b; do echo "sed -i \"s/$a/'$b ($a)'/g\" ML_aa.nwk"; done > s.sh
+sh s.sh
+#sed -i为写入，'s///g'为行替换
+sed -i 's/ (submitID)//g' ML_aa.nwk
+cd ../../
+mkdir aa/ML_aa
+cp aa/gblocks/ML_aa.nwk aa/ML_aa
+
+cd nucl/gblocks
+cp RAxML_bipartitionsBranchLabels.dna_b1000 ML_nucl.nwk
+#将accession号改为对应的物种名
+awk -F '\t' '{print $1,$2}' ../../t.info | while read a b; do echo "sed -i \"s/$a/'$b ($a)'/g\" ML_nucl.nwk"; done > s.sh
+sh s.sh
+#sed -i为写入，'s///g'为行替换
+sed -i 's/ (submitID)//g' ML_nucl.nwk
+cd ../../
+mkdir nucl/ML_nucl
+cp nucl/gblocks/ML_nucl.nwk nucl/ML_nucl
+
+=========================================================================
+
+二、根据物种名下载相应的界门纲目科属种信息并提取目科属种作为表格
+1.根据物种名列下载所有物种详细信息
+sampleInfoName.py文件
+#! /usr/bin/env python
+import sys
+import re
+import os
+import commands
+import time
+
+
+def main(name_list, output):
+    WGET = "/usr/bin/wget"
+
+    OUT = open(output, "w")
+    OUT.write("#TAXID\tORGANISM\tORDER\tFAMILY\tGENUS\tALL\n")
+    for line in open(name_list):
+        line = line.rstrip()
+        url_name = "%20".join(line.split())
+        print url_name
+
+        cmd_get_taxid = "%s -O rawinfo1.html -T 10 -w 10 http://www.ncbi.nlm.nih.gov/taxonomy/?term=%s" %\
+                (WGET, url_name)
+        (status, output) = commands.getstatusoutput(cmd_get_taxid)
+        if status != 0:
+            sys.stderr.write("ERROR: %d\n%s" % (status, output))
+            sys.exit(1)
+        print >>sys.stderr, "==================INFO TO DEBUG=============="
+        print >>sys.stderr, "SAMPLE: %s\n%s" % (line, output)
+
+        taxid = ""
+        for code_line in open("rawinfo1.html"):
+            code_line = code_line.rstrip()
+            if not re.search("wwwtax\.cgi\?id", code_line):
+                continue
+            code_infos = code_line.split()
+            for i in code_infos:
+                if re.search("wwwtax\.cgi\?id", i):
+                    taxid = i.split("=")[-1][:-1]
+                    print >>sys.stderr, "URL: %s\n" % (i)
+
+        cmd_get_taxonomy = "%s -O rawinfo2.html -T 10 -w 10 http://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=%s" %\
+                (WGET, taxid)
+
+        time.sleep(5)
+        (status, output) = commands.getstatusoutput(cmd_get_taxonomy)
+        if status != 0:
+            sys.stderr.write("ERROR: %d\n%s" % (status, output))
+            sys.exit(1)
+
+        print >>sys.stderr, output
+
+        print >>sys.stderr, "=============================================\n"
+
+        for code_line in open("rawinfo2.html"):
+            code_line = code_line.rstrip()
+            if re.search("TITLE=\"genus\"", code_line):
+                code_infos = code_line.split(";")
+                order_val = "unknown"
+                family_val = "unknown"
+                genus_val = "unknown"
+                all_infos = []
+                for i in code_infos:
+                    if not re.search("TITLE=", i):
+                        continue
+                    title = i.split("\"")[2]
+                    title_val = i.split(">")[1][:-3]
+                    all_infos.append(title_val)
+                    if title == "order":
+                        order_val = title_val
+                    if title == "family":
+                        family_val = title_val
+                    if title == "genus":
+                        genus_val = title_val
+
+                OUT.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (taxid, line,\
+                        order_val, family_val, genus_val,\
+                        "; ".join(all_infos)))
+
+        time.sleep(5)
+
+    OUT.close()
+
+    cmd = "rm -f rawinfo1.html rawinfo1.html"
+    (status, output) = commands.getstatusoutput(cmd)
+    if status != 0:
+        sys.stderr.write("ERROR: %d\n%s" % (status, output))
+        sys.exit(1)
+
+
+if len(sys.argv) > 1:
+    main(sys.argv[1], sys.argv[2])
+else:
+    print >>sys.stderr, "python %s <NameList> <output>" % (sys.argv[0])
+
+
+2.提取目科属种重要信息
+
+species.py文件
+#!/usr/bin/python
+f=open('species.txt','r')
+w=open('out.txt','w')
+
+for i in f:
+    i=i.strip().split('\t')
+    i2=i[1:6]
+    ii="\t".join(i2)    
+    j=i[5]
+    j=j.strip().split(';')
+    if j[0]=="<STR":
+        for jj in j:
+            if jj[-7:-1]=="iforme":
+                i[2]=jj
+            elif jj[-4:-1]=="ida":
+                i[3]=jj
+                i[4]=j[-1]
+                i1=i[1:6]
+                iii="\t".join(i1)
+                w.write("%s\n" % iii)
+    else:
+        w.write("%s\n" % ii)
+f.close()
+w.close()
+
+=========================================================================
+
+三、不完整的基因来进行构建进化树
+
+1.
+ls *.aa |while read a ;do python choice_gene.py gene.list *.aa/*.nucl ;done
+
+2.进行比对
+ls *.fa |while read a ;do muscle -in $a -out $a.ms ;done 
+
+3.处理比对后的结果
+ls *.ms |while read a ;do python lack.py accession.list $a > $a.out ;done 
+
+ls *.ms |while read a ;do mv $a.out $a ;done
+
+************************************************************************
+choice_gene.py文件：
+#! /usr/bin/python
+
+import sys
+from Bio import SeqIO
+clean={
+'CO1':'COX1',
+'CO2':'COX2',
+'CO3':'COX3',
+'CYTOCHROME C OXIDASE SUBUNIT 1':'COX1',
+'CYTOCHROME C OXIDASE SUBUNIT I':'COX1',
+'CYTOCHROME C OXIDASE SUBUNIT 2':'COX2',
+'CYTOCHROME C OXIDASE SUBUNIT II':'COX2',
+'CYTOCHROME C OXIDASE SUBUNIT 3':'COX3',
+'CYTOCHROME C OXIDASE SUBUNIT III':'COX3',
+'COX2A':'COX2',
+'COI':'COX1',
+'COII':'COX2',
+'COIII':'COX3',
+'COXI':'COX1',
+'COXII':'COX2',
+'COXIII':'COX3',
+'cytb':'CYTB',
+'CYTOCHROME B':'CYTB',
+'ATPASE 9':'ATP9',
+'ATPASE9':'ATP9',
+'ATPASE9':'ATP9',
+'ATPASE 6':'ATP6',
+'ATPASE6':'ATP6',
+'ATP SYNTHASE F0 SUBUNIT 6':'ATP6',
+'atp9':'ATP9',
+'atp6':'ATP6',
+'atp8':'ATP8',
+'atp 8':'ATP8',
+'ATPASE 8':'ATP8',
+'ATP 8':'ATP8',
+'cytB':'CYTB',
+'cob':'CYTB',
+'COB':'CYTB',
+'CYT B':'CYTB',
+'CYT B':'CYTB',
+'NADH1':'ND1',
+'NADH DEHYDROGENASE SUBUNIT 1':'ND1',
+'NADH2':'ND2',
+'NADH DEHYDROGENASE SUBUNIT 2':'ND2',
+'NADH3':'ND3',
+'NADH DEHYDROGENASE SUBUNIT 3':'ND3',
+'NADH4':'ND4',
+'NADH DEHYDROGENASE SUBUNIT 4':'ND4',
+'NADH4L':'ND4L',
+'NADH DEHYDROGENASE SUBUNIT 4L':'ND4L',
+'NADH5':'ND5',
+'NADH DEHYDROGENASE SUBUNIT 5':'ND5',
+'NADH6':'ND6',
+'NADH DEHYDROGENASE SUBUNIT 6':'ND6',
+'NAD1':'ND1',
+'NAD2':'ND2',
+'NAD3':'ND3',
+'NAD4':'ND4',
+'NAD4L':'ND4L',
+'NAD5':'ND5',
+'NAD6':'ND6',
+}
+def getGene(gene):
+	if gene in clean.keys():
+		name=clean[gene]
+	if gene not in clean.keys():
+		name=gene
+	return name
+def main(gene_file,cds_file):
+	name=cds_file.split('.')[0]
+	gene_list=[]
+	have=[]
+	for i in open(gene_file,'r'):
+		gene_name=i.strip()
+		gene_list.append(gene_name)
+	for i in SeqIO.parse(cds_file,'fasta'):
+		gene_name=i.description.split('gene=')[-1].split(']')[0].upper()
+		new_name=getGene(gene_name)
+		if new_name in gene_list and new_name not in have:
+			out=open(new_name+'.fa','a')
+			have.append(new_name)
+			out.write('>%s\n%s\n' % (name,i.seq))
+			out.close()
+if len(sys.argv) ==3 :
+	main(sys.argv[1],sys.argv[2])
+if len(sys.argv) !=3:
+	print 'python %s <gene.list> <fa>' % sys.argv[0]
+
+************************************************************************
+lack.py文件：
+
+#1 /usr/bin/python
+
+import sys
+from Bio import SeqIO
+
+def main(accession,fa):
+	dic={}
+	for i in SeqIO.parse(fa,'fasta'):
+		dic[i.id]=i.seq
+		length=len(i.seq)
+	for i in open(accession,'r'):
+		line=i.strip().split()
+		name=line[0]
+		if name in dic.keys():
+			print '>%s\n%s' % (name,dic[name])
+		if name not in dic.keys():
+			print '>%s\n%s' % (name,'-'*length)
+if len(sys.argv) ==3 :
+	main(sys.argv[1],sys.argv[2])
+if len(sys.argv) !=3:
+	print 'python %s <accession.list> <fa>' % sys.argv[0]
+
+========================================================================
+
+四、核外基因组V2流程
+核外基因组V2从V1文件夹反馈无误开始，跟据客户特殊需求进行的分析
+1.kaks保留4位小数，p-genetic保留3位，0也要加进去，skew保留4位.
+2.表格全部标题要加粗，高18，要另存为xls,中文宋体，英文数字time new roman,
+
+1. 进化树
+见进化树流程
+
+2. CodonUsage
+
+1.新建一个目录，把/MTG/codonusage的文件夹复制到当前文件夹，cp -r ~/bio/MTG/codonusage ./ 
+2.把sqn文件复制到codonusage的文件夹内运行sh step1 *.sqn。程序出来结果的是以第一套密码子做的，所以需要更改密码子。进入CU1,根据物种的所使用的密码子的套数，运行python ../bin/change_codon.py *.csv 2 fre.csv (其中*.csv是本来存在的csv文件，2是密码子的套数，目前程序只支持第2,4,5,22,23这几套的转换，其他的需到程序中添加，fre.csv是出来的结果，名字必须为fre.csv)。
+3.用excel打开fre.csv ,先把Frequency一列降序，再Amino acid一列升序（是为了使长的柱子在下面）。在后面新加入一列Countif：=COUNTIF($A$2:A2,A2)
+运行sh step2. 生成frequency.pdf和RSCU.pdf。在photoshop中对图片进行调整，另存为pdf,png,tif三种格式。模板如下图：
+5.打开RSCU.csv，格式调整为codonusage文件夹下的codonUsage模板.xls的样子，其中字体全文time new roman.1和2列列宽为12,3到5列列宽为16，除了备注行，其余行高为18.
+注意：检查时要主要检查stp（即终止密码子），如果stp的数量大于正常的数量时要检查是否有更改密码子的套数
+
+3.tRNA二级结构（可用于发表的）
+4. 基因重排
+4.1打开网站：http://genome.lbl.gov/vista/mvista/submit.shtml，根据挑选的物种数目+1的数字填入Total number of sequences，然后submit，填入邮箱，inquiry中的sequence1和2导入相同的序列（即目标物种的fasta序列）
+4.2 然后把需要做的物种的tbl，然后运行python change_tbl.py *.tbl > *_result.tbl(注意，如果tbl有SSC，LSC或者IR区的注释，要先去掉这几行再运行程序，如需添加这几行，需要自己加进去，程序也没有把orf转变，如果需要添加orf，把程序倒数第三行的‘and’和后面的删掉即可；如有一些中间有其他基因的断裂基因，也需要自己把另外的几段添加进去；添加的规则是：如果是正向则‘>’,反向则’<’,>或<1	100	gene_name，然后下一行，1	100	exon).
+4.3在additional options选项中导入上一步生成的tbl文件，注意，物种要对应一开始导入的序列文件的物种。然后点最先面的submit。
+4.4等邮件过来，打开链接，下载sequence1的PDF。
+
+********************************************************************
+
+kaks分析(建议客户选用不超过7个物种,如超过7个，最高只做物种）
+software: DnaSP
+利用DnaSP计算KaKs
+序列下载-追加-留id-比对-kaks-fasta_id>name-R图
+
+1.下载核酸序列，一个文件里可能有多个基因
+awk '{print $1}' file | while read a; do asn2all -r -A $a -o $a.nucl -f d;done
+
+2.下载genebank文件
+awk '{print $1}' file | while read a; do asn2all -r -A $a -f g > $a.gb; done
+
+3.计算一个文件基因数目
+grep ">" fileName|wc -l
+
+3.1目标基因除id外除去注释;long_seq1.py
+python long_seq1.py file
+
+3.2将目标物种target的6个基因分别对应加进6个文件中，6个基因名和文件名对应
+awk '{print $1}' fileList |while read a;do echo ">target" >>$a.fa;grep -A 1 $a 1fastaFile|tail -n 1 >>$a.fa;done
+
+4.取出不同物种相同的基因序列放在同一文件中
+python Phylotools/preTree4nucl.py file 1
+
+5.去终止子;kaks_stop.py
+ls *.fa|while read a;do python kaks_stop.py $a;done
+
+6.muscle比对;muscle，注意kaks在去终止子后才比对
+ls *.fa|while read a;do muscle -in $a -out $a.ms;done
+
+6.1比对完成的序列查看最后---之后是否为3的整数倍，否则应往---前移动
+
+7.在preTree4nucl.py接入第二个参数文件;preTree4nucl.py
+python Phylotools/preTree4nucl.py file 2 > nucl.fsa
+
+8.将fasta文件的id号变为物种名;awk
+ls *.fa |while read d;do awk '{print $1,$2,$3}' file | while read a b c ;do echo "sed -i \"s/$a/${b}_$c/\" $d ";done > $d.sh;done
+
+ls *.sh|while read a;do sh $a;done
+
+file
+NC_028509	Creteuchiloglanis macropterus
+NC_028511	Oreoglanis immaculatus
+NC_021601	Exostoma labiatum
+NC_021600	Glaridoglanis andersonii
+NC_021597	Glyptosternon maculatum
+NC_021605	Pseudecheneis sulcata
+target	Parachiloglanis
+
+9.密码子同义和变义，python调用R 作图;kaks_R.py
+ls *.fa|while read a;do python kaks_R.py $a;done
+
+
+统计
+Gene	ID	ka	ks	kaks
+ND1	Procypris_rabaudi-Procypris_merus	0.0163826	0.2722762	0.06
+ND2	Procypris_rabaudi-Procypris_merus	0.03051462	0.2070977	0.147
+ND3	Procypris_rabaudi-Procypris_merus	0.009389947	0.212343	0.044
+ND4	Procypris_rabaudi-Procypris_merus	0.02771658	0.3572396	0.078
+ND4L	Procypris_rabaudi-Procypris_merus	0.01269962	0.3673707	0.035
+ND5	Procypris_rabaudi-Procypris_merus	0.0230239	0.2733556	0.084
+ND6	Procypris_rabaudi-Procypris_merus	0.02479636	0.3310648	0.075
+ATP6	Procypris_rabaudi-Procypris_merus	0.01261978	0.2788561	0.045
+ATP8	Procypris_rabaudi-Procypris_merus	0.009259524	0.2170874	0.043
+COX1	Procypris_rabaudi-Procypris_merus	0.003768652	0.2893457	0.013
+COX2	Procypris_rabaudi-Procypris_merus	0.008298884	0.2077375	0.04
+COX3	Procypris_rabaudi-Procypris_merus	0.01166473	0.2070452	0.056
+CYTB	Procypris_rabaudi-Procypris_merus	0.01052227	0.3663134	0.029
+
+*****************************************************************
+
+kaks.py文件
+# -*- coding: utf-8 -*-
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+在获取t.info文件后，生成一系列cds文件，保存到cds文件夹中，
+使用本程序可以生成去除终止密码子而且调用了muscle进行了比对
+最后每个物种将其全部CDS连成一条
+本程序原来用于在计算kaks中整理数据
+之所以没有将调用取cds文件的命令行是因为cds文件有可能有错，
+特别是目标物种sqn转cds
+使用方法：
+1. 获取t.info
+2. mkdir cds
+3. awk -F '\t' '{print $1}' t.info| while read a; do asn2all -r -A $a -o cds/$a.nucl -f d; done
+4. asn2all -i *.sqn -o cds/submitID.fa -f d 
+5. python kaks.py cds
+最后会在工作目录下生成result.fasta
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+import sys
+import re
+import os
+import argparse
+from Bio import SeqIO
+
+__author__ = 'Luria'
+__date__= '2016.6.2'
+
+clean_dir={
+'CO1':'COX1',
+'CO2':'COX2',
+'CO3':'COX3',
+'CYTOCHROME C OXIDASE SUBUNIT 1':'COX1',
+'CYTOCHROME C OXIDASE SUBUNIT I':'COX1',
+'CYTOCHROME C OXIDASE SUBUNIT 2':'COX2',
+'CYTOCHROME C OXIDASE SUBUNIT II':'COX2',
+'CYTOCHROME C OXIDASE SUBUNIT 3':'COX3',
+'CYTOCHROME C OXIDASE SUBUNIT III':'COX3',
+'COX2A':'COX2',
+'COI':'COX1',
+'COII':'COX2',
+'COIII':'COX3',
+'COXI':'COX1',
+'COXII':'COX2',
+'COXIII':'COX3',
+'cytb':'CYTB',
+'CYTOCHROME B':'CYTB',
+'ATPASE 9':'ATP9',
+'ATPASE9':'ATP9',
+'ATPASE9':'ATP9',
+'ATPASE 6':'ATP6',
+'ATPASE6':'ATP6',
+'ATP SYNTHASE F0 SUBUNIT 6':'ATP6',
+'atp9':'ATP9',
+'atp6':'ATP6',
+'atp8':'ATP8',
+'atp 8':'ATP8',
+'ATPASE 8':'ATP8',
+'ATP 8':'ATP8',
+'cytB':'CYTB',
+'cob':'CYTB',
+'COB':'CYTB',
+'CYT B':'CYTB',
+'CYT B':'CYTB',
+'NADH1':'ND1',
+'NADH DEHYDROGENASE SUBUNIT 1':'ND1',
+'NADH2':'ND2',
+'NADH DEHYDROGENASE SUBUNIT 2':'ND2',
+'NADH3':'ND3',
+'NADH DEHYDROGENASE SUBUNIT 3':'ND3',
+'NADH4':'ND4',
+'NADH DEHYDROGENASE SUBUNIT 4':'ND4',
+'NADH4L':'ND4L',
+'NADH DEHYDROGENASE SUBUNIT 4L':'ND4L',
+'NADH5':'ND5',
+'NADH DEHYDROGENASE SUBUNIT 5':'ND5',
+'NADH6':'ND6',
+'NADH DEHYDROGENASE SUBUNIT 6':'ND6',
+'NAD1':'ND1',
+'NAD2':'ND2',
+'NAD3':'ND3',
+'NAD4':'ND4',
+'NAD4L':'ND4L',
+'NAD5':'ND5',
+'NAD6':'ND6',
+}
+
+def clean_Gene(gene):
+	name=gene.upper()
+	if name in clean_dir:
+		name=clean_dir[name]
+	else:
+		pass
+	return name
+# --------------------------part1---------------------------
+def getGeneDic(cdsfile):
+	'''
+	In this section, a dictionary which I call 'ncdic' like below was generated:
+	{'NC_026885': {'ATP8': 'ATTCCACAAATAGCC...',},}
+	maybe you can use 'print ncdic' to see it
+	'''
+	dirlst = os.listdir(cdsfile)
+	ncdic = {}
+	for i in dirlst:
+		species = i.split('.')[0]
+		fa = cdsfile+'/'+i
+		record = SeqIO.parse(fa, 'fasta')
+		genedic = {}
+		for j in record:
+			gene = re.findall(r'gene=(.*?)]', j.description)
+			genedic[clean_Gene(gene[0])] = j.seq
+		ncdic[species] = genedic
+		# print ncdic
+	return ncdic
+
+def check(cdsfile):
+	'''
+	This funtion used to check the input dir and cds file
+	'''
+	dirlst = os.listdir(cdsfile)
+	genelen = []
+	for i in dirlst:
+		if re.search(r'~', i):
+			os.remove(cdsfile+'/'+i)
+			continue
+						
+		fa = cdsfile+'/'+i
+		record = SeqIO.parse(fa, 'fasta')
+		genelst = []
+		for j in record:
+			if re.search('gene=', j.description):
+				gene = re.findall(r'gene=(.*?)]', j.description)
+				genelst.append(clean_Gene(gene[0]))
+			else:
+				print '-- Format is abnormal: ' + i + ' without "gene="! \n'
+				exit(1)
+
+		for t in genelst:
+			if genelst.count(t) > 1:
+				print '-- Gene in ' + i + ' has duplication! \n'
+				exit(1)
+
+		genelen.append(len(genelst))
+	if len(set(genelen)) != 1:
+		print '-- There are different gene nums, please check! \n'
+		exit(1)	
+
+def getGenList(dic):
+	'''
+	This function used to get a list like below:
+	['ATP6', 'COX3', ]
+	'''
+	for k, v in dic.items():
+		genelst = v.keys()
+		break
+	# print genelst
+	return genelst
+
+def getGenFile(cdsfile, dic, lst):
+	'''
+	This function used to get a series of gene file in cds dir,
+	such as, ATP6.fa COX2.fa and so on 
+	NOTE: This function invoked function clean() to remove stop codon
+	'''
+	for i in lst:
+		genefile = cdsfile+'/'+i+'.fa'
+		ifile = open(genefile, 'w')
+		for k, v in dic.items():
+			for vk in v.keys():
+				if vk == i:
+					sequence = clean(str(dic[k][vk]))
+					print >> ifile, '>%s--%s\n%s' %(k, vk, sequence)
+		ifile.close()
+		
+		cmd="muscle3.8.31_i86linux64 -in %s -out %s.ms" % (genefile, genefile)
+		os.system(cmd)
+		
+def clean(seq):
+	t = len(seq)
+	s = t-3 if t%3==0 else t-(t%3)
+	return seq[:s]
+		
+# ----------------------------part2------------------------------
+def geneDic(cdsfile, lst):
+	'''
+	This function used to get a dictionary which I call genedic like below:
+	{'ND4': {'NC_026885': 'ATGTTAAAGTT..', }, }
+	maybe you can use 'print genedic' to see it 
+	'''
+	genedic = {}
+	for i in lst:
+		msname = cdsfile +'/'+ i +'.fa.ms'
+		msfile = SeqIO.parse(msname, 'fasta')
+		ncdic = {}
+		for j in msfile:
+			nc = j.description.split('--')[0]
+			ncdic[nc] = str(j.seq)
+		genedic[i] = ncdic
+	# print genedic
+	return genedic
+
+def getSpeciesList(dic):
+	'''
+	This function used to get a NC number list from genedic, like below:
+	['NC_016015', 'NC_026885', ]
+	'''
+	for k, v in dic.items():
+		nclst = v.keys()
+		break
+	# print nclst
+	return nclst
+
+def getResult(dic, splst, lst):
+	'''
+	This is the end of this program, used to generate result.fa  
+	'''
+	outfile = open('result.fasta', 'w')
+	for i in splst:
+		print >> outfile, '>%s' %i
+		for j in lst:
+			print >> outfile, dic[j][i].strip(),
+		print >> outfile, '\n' 
+	outfile.close()
+
+# ----------------------------part3------------------------------
+def main(cdsfile):
+	check(cdsfile)
+	ncdic = getGeneDic(cdsfile)
+	lst = getGenList(ncdic)
+	getGenFile(cdsfile, ncdic, lst)
+	
+	genedic = geneDic(cdsfile, lst)
+	splst = getSpeciesList(genedic)
+	getResult(genedic, splst, lst)
+	
+if __name__=='__main__':
+	if len(sys.argv) != 2:
+		print 'Usage: <python> <script> <cdsdir>'
+		print '<cdsdir> is a dir, which contains the cdsfile of each species'
+		exit(1)
+	else:
+		scgene, cdsfile = sys.argv
+		main(cdsfile)
+
+******************************************************************
+
+kaks_stop.py文件：
+
+#! /usr/bin/python 
+
+import sys
+from Bio import SeqIO
+for i in SeqIO.parse(sys.argv[1],'fasta'):
+	length=len(i.seq)
+	a=divmod(length,3)
+	if a[1] == 0:
+		print '>%s\n%s' % (i.id,i.seq[:-3])
+	if a[1] != 0:
+		print '>%s\n%s' % (i.id,i.seq[:-a[1]])
+
+********************************************************************
+
+kaks_R.py文件：
+
+#! /usr/bin/python 
+
+import sys
+import os
+import re
+def main(fa):
+    out=open("%s.R" % (fa),'w')
+    out.write("library(\"seqinr\")\nfa <- read.alignment(file=\"%s\",format=\"fasta\")\nresult <- kaks(fa)\nresult" % (fa))
+    out.close()
+    os.system("Rscript %s.R > %s.txt" % (fa,fa))
+    kaks=open("%s.txt" % (fa))
+    ka=''
+    ks=''
+    ka_result={}
+    ks_result={}
+    for i in kaks:
+        line=i.strip().split()
+        if ka=='begin':
+            if re.search("^ ",i):
+                ka_dic={}
+                for num in range(0,len(line)):
+                    ka_dic[num]=line[num]
+            elif len(i.strip()) != 0 :
+                access=line[0]
+                for num in range(0,len(line[1:])):
+                    name="%s-%s" % (ka_dic[num],access)
+                    new_ka=line[num+1]
+                    if float(line[num+1]) > 9:
+                        new_ka="NA"
+                    ka_result[name]=new_ka
+        if ks =='begin':
+            if re.search("^ ",i):
+                ks_dic={}
+                for num in range(0,len(line)):
+                    ks_dic[num]=line[num]
+            elif len(i.strip()) != 0 :
+                access=line[0]
+                for num in range(0,len(line[1:])):
+                    name="%s-%s" % (ks_dic[num],access)
+                    new_ks=line[num+1]
+                    if float(line[num+1]) > 9:
+                        new_ks='NA'
+                    ks_result[name]=new_ks
+        if i.strip() =="$ka":
+            ka='begin'
+        if i.strip() =="$ks":
+            ks='begin'
+        if len(i.strip())==0:
+            ka='finish'
+            ks='finish'
+    out1=open("%s.xls" % (fa),'w')
+    out1.write("ID\tka\tks\tkaks\n")
+    for i,k in ka_result.items():
+        ka=float(k)
+        ks=float(ks_result[i])
+        if ka == "NA" or ks == "NA" or ka == 0 or ks == 0 :
+            kaks=0
+        if ka != "NA" and ks != "NA" and ka != 0 and ks != 0 :
+           kaks=round(ka/ks,3)
+        out1.write("%s\t%s\t%s\t%s\n" % (i,ka,ks,kaks))
+    out1.close()
+    out2=open("%s_draw.R" % (fa),'w')
+    out2.write("library(\"ggplot2\")\nfile <- read.table(\"%s.xls\",header=T)\npdf(file=\"%s.pdf\")\nggplot(file,aes(x=ID,y=kaks,fill=ID),y=\"Ka/Ks\") + geom_bar(stat=\"identity\",width=0.4) + geom_text(aes(label=kaks),vjust=-1.0) + theme(axis.text.x = element_text(size = 5,angle=45,hjust=1))"% (fa,fa))
+    out2.close()
+    os.system("Rscript %s_draw.R" % (fa))
+main(sys.argv[1])
+
+
+*********************************************************************
+
+kaks_sort.py文件：
+#! /use/bin/python 
+
+import sys
+
+def sort_kaks(infile,outfile):
+	inf=open(infile,'r')
+	outf=open(outfile,'w')
+	dist={}
+	for i in inf:
+		a=i.strip().split("\t")
+		if a[0]=="Seq1":
+			pass
+		else:
+			b=sorted([a[0].split(".")[0],a[1].split(".")[0]])
+			dist['\t'.join(b)]=[a[2],a[3],a[4]]
+	for x in sorted(dist.keys()):
+		outf.write("%s\t%s\t%s\n" % (infile.split(".")[0],x,'\t'.join(dist[x])))
+sort_kaks(sys.argv[1],sys.argv[2])
+
+
+****************************************************************
+
+
+6.CCT（如物种太多，要把backboneRadius的值调大，并且把legendFontSize的值调小一点,CDS和DNA的图的物种排列顺序不一定一样）
+打开装有CCT的虚拟机上的linux,新建一个文件夹,在里面运行build_blast_atlas.sh -p $1（文件夹名字），vim draw.sh 写下如下内容:
+build_blast_atlas.sh -p $1 --map_size x-large -b 50  --custom "backboneRadius=3000 tick_density=0.15 labelFontSize=100 at_skew=T legendFontSize=85"  其中$1是文件夹名字。
+把目标物种的gb文件放到$1里面的reference_genome，其他物种放到compare_genome中。
+运行 sh draw.sh   #文件的名字不能有空格。
+Linux 设置共享文件夹：
+$sudo mount -t vboxsf share1 /mnt/share2
+share1是本机在设置里面共享的文件夹名字，如下面的2huangjingchuan ,share2是虚拟机呢/mnt/目录下，你创建的目录。
+
+目标图片在map of cds 和map of dna 中。
+
+******************************************************************
+
+7. 扩SNP
+7.1 以集群上某处作为工作目录
+mkdir 01.fq
+将PE reads链接到01.fq中；
+将Gentools/V2tools中的整个SNP文件夹复制到工作目录下，并重命名为02.snp
+将基因组序列文件（即input中的XX.fsa文件。为了让后续分析不出意外的错，尽量简洁重命名该文件，eg F187.fsa）和genebank文件（即Genbank中*.genbank.txt文件）拷贝到02.snp中
+cd 02.snp
+sh 01.align.sh XX.fsa ../01.fq/*.fastq.gz > 01.log 2>&1
+# 这一步是将genome remap回reads，再用samtools找SNP，最终生成result.raw.vcf
+# 其中XX.fsa是genome文件
+
+7.2 运行vcfpass.py进行过滤
+python vcfpass.py -d 0.1 -t all result.raw.vcf > result.pass.vcf
+# 其中0.1这个值可以调节，这表示某位点发生的变异数占总深度的比率
+
+7.3 运行anote2A.py生成mutant文件
+python anoteSNP.py XX_genbank.txt result.pass.vcf > result.mutant.xls
+# 运行完生成的result.mutant.xls虽然后缀为xls但依然是文本文件需要保存到Excel中并调整格式
+新的call snp和indel的方法：
+比对完后得到的bam文件，samtools mpileup -f example.fasta example.bam > example.mpileup
+Python call_snp_and_indel.py example.mpileup example.snp.xls example.indel.xls
+如过是两个样品以上：ls *.snp.xls |while read a ;do printf “$a:\n” ;cat $a ;printf “\n”;done > all.snp.txt
+ls *.indel.xls |while read a ;do printf “$a:\n” ;cat $a ;printf “\n”;done > all.indel.txt
+python reorder.py all.snp.txt > all.snp.xls
+python reorder.py all.indel.txt > all.indel.xls
+python snp_gb.py all.snp.xls example.gb > snp.result.xls#注意，需要read_GB.py在当前目录，如果多于或者少于两个样品需要更改程序。
+python indel_gb.py all.indel.xls example.gb > indel.result.xls#注意：需要read_GB.py在当前目录,并且需要打开indel.result.xls,查看哪些是在CDS上（除了orf），把改变的氨基酸填上。
+
+*******************************************************************8. 基因组SSR分析
+8.1 以集群上某处作为工作目录
+mkdir 01.fq
+将PE reads链接到01.fq中
+将Gentools/V2tools中的整个SSR文件夹复制到工作目录下，并重命名为02.ssr
+再将基因组序列文件XX.fsa和genbank文件XX_genbank.txt复制到02.ssr中，执行
+perl misa.pl XX.fsa
+# XX.fsa是基因组序列文件
+# perl misa.pl可以看到更详见的说明
+# 运行完生成一个XX.fsa.misa的文件，
+
+8.2 再运行
+python anoteSSR.py XX_genbank.txt XX.fsa.misa
+# 这一步是对上步生成的misa文件进行整理
+# XX_genbank.txt是目标物种的genbank文件，XX.fsa.misa是上步生成的misa文件
+# 这一步调用了read_GB.py
+
+8.3 如果要设引物，可以参照俊哥附加的整体流程文件READ.pip.txt（已经在工作目录下）
+
+10.重复序列分析(不含misc_match)
+以集群上某处为工作目录，将基因组序列文件XX.fsa文件复制到工作目录下，同时将Gentools/V2tools/Repeat中的repeat2xls.py复制到工作目录下：
+repeat-match -n 30 XX.fsa > repeat.list
+python repeat2xls.py XX.fsa repeat.list out.xls outr.xls
+# 生成out.xls和outr.xls分别是正向和反向重复的结果文件
+# 同样，这里生成的xls也只是后缀为xls的文本文件，需要整理到Excel中，调整格式
+
+11.long_repeat（含misc_match） 
+在这个网站上完成http://bibiserv.techfak.uni-bielefeld.de/reputer/)
+把结果保存为txt，用xls打开，然后用python new_repeat.py txt genbank out (注意，需要repeat文件夹内的read_GB.pyc文件才能正常运行,起始的位置是和程序一样，起始为0,需要把起始位置全部加1)
+12. 修改报告
+需要修改的地方有：
+a. 物种名，替换所有‘华鲮’为目标物种名
+b. 报告日期（首页）
+
+
+
+
+13.p-genetic
+（需要每个基因全部核苷酸序列的fa,1-2位的核苷酸序列的fa,3位的核苷酸序列的fa,需计算全部基因，1-2位，3位,all的p-gentic的平均值来作图)注:全部物种的基因需要放在同一个fa
+1.打开mega6,File→open A file→导入fa文件，出来一个弹窗点击Align，用muscle比对，点Date→save session,保存。
+2.在mega6中打开上一步保存的文件，出来一个弹窗点Analyze,在点击Analysis→distance→compute pairwise distances .. ,点yes,出来一个弹窗，在variance estimation method 中选Bootstrap method ,NO.of Bootstrap method 选1000,Model/Method 中选p-distance.点compute。点击Average→overall ,出来一个值即是p-genetic 的值(一般不会大于1,如大于1,需检查一遍是否有错)
+
+****************************************************************
+
+15.GC-skew
+一，多个物种时：
+把需要做的物种的GB文件放到同一个文件夹gb下，运行 
+Python static.py gb/ 
+注意：出来一个Gene Information.xls的文件，打开文件，如发现有空的或者长度与其他物种相差较大时，应打开此物种的GB文件检查，并相应的修改程序（主要是rRNA，除了鱼类，其他物种没有Control region)。
+二，只做一个物种时：
+asn2all -i *.sqn -o *.nucl -f d
+Python AT.py *.nucl > GC-skew.xls
+用LibreOffice Calc打开GC-skew.xls，制作成skew2.png的图表
+
+static.py文件：
+ # -*- coding: utf-8 -*-
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+last edit: 2015.10.9
+readme: please mkdir fisrt, use python *.py filename/
+本程序可算出genbank中的ATskew和GCskew
+可修改：如果进来是单个文件怎么样....
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+from Bio import SeqIO
+from xlwt import Workbook,XFStyle,Borders
+import xlwt
+import sys
+import os
+import re
+
+script,filename=sys.argv
+def getInfo():
+        name=[]
+        length=[]
+        ATpercent=[]
+        GCskew=[]
+        ATskew=[]
+        aalen=[]
+        cdsat=[]
+        rrnllen=[]
+        rrnlat=[]
+        rrnslen=[]
+        rrnsat=[]
+        conlen=[]
+        conat=[]
+        trnalen=[]
+        trnaat=[]
+        thirdat=[]
+        fname=[]
+        accnum=[]
+
+        fname=os.listdir(filename)[:]
+        for gbf in fname:
+                cdsseq=''
+                rrnlseq=''
+                rrnsseq=''
+                trnaseq=''
+                conseq=''
+                third=''
+		trans=''
+                try:
+                        gbfile=SeqIO.read(filename+'/'+gbf,'gb')
+                except IOError:
+                        print gbf,'is not a normal genbank file!'
+
+                #2015.11.6 add +' '+re.findall(r'\w+',gbfile.description)[1]
+                spacename=re.findall(r'\w+',gbfile.description)[0]+' '+re.findall(r'\w+',gbfile.description)[1]
+                gbid=gbfile.id if (gbfile.id).startswith('N') else ' '
+                name.append(spacename)
+                accnum.append(gbid)
+                wholeseq=str(gbfile.seq)
+                length.append(len(wholeseq))
+                at=getCont(wholeseq)[0]
+                ATpercent.append(at)
+                GCskew.append(getCont(wholeseq)[1])
+                ATskew.append(getCont(wholeseq)[2])
+
+                for feature in gbfile.features:
+                        subseq=''
+                        figure=re.findall(r'\d+',str(feature.location))
+
+                        for i in range(len(figure)/2):
+                                subseq+=wholeseq[int(figure[i*2]):int(figure[i*2+1])]
+
+                        if feature.type=='CDS':
+                                cdsseq+=subseq
+				trans+=feature.qualifiers['translation'][0]
+
+			# 2015.11.06 add product/s-rRNA and product/16S
+                        if (feature.qualifiers.has_key('gene') and feature.qualifiers['gene'][0].find('rnl')!=-1)\
+                           or (feature.qualifiers.has_key('product') and feature.qualifiers['product'][0]=='l-rRNA')\
+                           or (feature.qualifiers.has_key('product') and re.search(r'16S',feature.qualifiers['product'][0])):
+                               rrnlseq+=subseq
+
+                        if (feature.qualifiers.has_key('gene') and feature.qualifiers['gene'][0].find('rns')!=-1)\
+                           or (feature.qualifiers.has_key('product') and feature.qualifiers['product'][0]=='s-rRNA')\
+                               or (feature.qualifiers.has_key('product') and re.search(r'12S',feature.qualifiers['product'][0])):
+                               rrnsseq+=subseq
+
+                        if feature.type=='tRNA':
+                                trnaseq+=subseq
+
+                        if (feature.qualifiers.has_key('note') and re.search(r'[Cc]ontrol region',feature.qualifiers['note'][0]))\
+                           or (feature.qualifiers.has_key('product') and re.search(r'[Cc]ontrol region',feature.qualifiers['product'][0]))\
+                           or feature.type=='D-loop':
+                                conseq+=subseq
+
+                for j in range(len(cdsseq)/3):
+                        third+=cdsseq[j*3+2]
+
+                try:
+                        aalen.append(len(trans))
+                        cdsat.append(getCont(cdsseq)[0])
+                        thirdat.append(getCont(third)[0])
+                except ZeroDivisionError:
+                        print spacename,'cannot find CDS!'
+                        cdsat.append(0)
+                        thirdat.append(0)
+                try:
+                        rrnllen.append(len(rrnlseq))
+                        rrnlat.append(getCont(rrnlseq)[0])
+                except ZeroDivisionError:
+                        print spacename,'cannot find rrnL!'
+                        rrnlat.append(0)
+                try:
+                        rrnslen.append(len(rrnsseq))
+                        rrnsat.append(getCont(rrnsseq)[0])
+                except ZeroDivisionError:
+                        print spacename,'cannot find rrnL!'
+                        rrnsat.append(0)
+
+                try:
+                        trnalen.append(len(trnaseq))
+                        trnaat.append(getCont(trnaseq)[0])
+                except ZeroDivisionError:
+                        print spacename,'cannot find tRNA!'
+                        trnaat.append(0)
+
+                try:
+                        conlen.append(len(conseq))
+                        conat.append(getCont(conseq)[0])
+                except ZeroDivisionError:
+                        print spacename,gbid,'cannot find Control region!'
+                        conat.append(0)
+
+        workbook=xlwt.Workbook()
+        sheet1=workbook.add_sheet('static for skew',cell_overwrite_ok=True)
+	# 2015.11.9 change GC-skew% >>> GC-skew
+        subtitle=['AT%','GC-skew','AT-skew','Length(aa)','AT%(all)','AT%(3rd)',
+                  'Length(bp)','AT%','Length(bp)','AT%','Length(bp)','AT%',
+                  'Length(bp)','AT%']
+        for i,tit in enumerate(subtitle):
+                sheet1.write(1,i+3,tit)
+
+        sheet1.write_merge(0,1,0,0,'Speics')
+        sheet1.write_merge(0,1,1,1,'Accession number')
+        sheet1.write_merge(0,1,2,2,'Length(bp)')
+        sheet1.write_merge(0,0,3,5,'Entire genome')
+        sheet1.write_merge(0,0,6,8,'Protein-coding gene')
+        sheet1.write_merge(0,0,9,10,'rrnL')
+        sheet1.write_merge(0,0,11,12,'rrnS')
+        sheet1.write_merge(0,0,13,14,'tRNAs')
+        sheet1.write_merge(0,0,15,16,'Control region')
+
+        for j in range(len(name)):
+                try:
+                        sheet1.write(j+2,0,name[j])
+                        sheet1.write(j+2,1,accnum[j])
+                        sheet1.write(j+2,2,length[j])
+                        sheet1.write(j+2,3,ATpercent[j])
+                        sheet1.write(j+2,4,GCskew[j])
+                        sheet1.write(j+2,5,ATskew[j])
+                        sheet1.write(j+2,6,aalen[j])
+                        sheet1.write(j+2,7,cdsat[j])
+                        sheet1.write(j+2,8,thirdat[j])
+                        sheet1.write(j+2,9,rrnllen[j])
+                        sheet1.write(j+2,10,rrnlat[j])
+                        sheet1.write(j+2,11,rrnslen[j])
+                        sheet1.write(j+2,12,rrnsat[j])
+                        sheet1.write(j+2,13,trnalen[j])
+                        sheet1.write(j+2,14,trnaat[j])
+                        sheet1.write(j+2,15,conlen[j])
+                        sheet1.write(j+2,16,conat[j])
+                except IndexError:
+                        pass
+
+                workbook.save('Gene Information.xls')
+
+def getCont(seq):
+        a=seq.count('A')
+        t=seq.count('T')
+        c=seq.count('C')
+        g=seq.count('G')
+        n=seq.count('N')
+        atcgn=a+t+c+g+n
+	# 2015.11.13师姐说AT-skew和GC-skew保留4位小数
+        GCskew=round(float(g-c)/(g+c),4)
+        ATskew=round(float(a-t)/(a+t),4)
+        AT=round(float(a+t)/atcgn*100,2)
+        return AT,GCskew,ATskew
+
+def main():
+        if True:
+                getInfo()
+
+if __name__=='__main__':
+        main()
+
+
+
+*****************************************************************
+
+16.内含子分析
+挑选出含有intron的物种的genbank文件放在同一个文件夹内，运行：
+ls *.gb | while read a ;do python intron.py $a $a.out ;done 
+cat *.out > intron.xls 
+打开文件，把intron的类型全部换成GI,GII或者IA1,IB2之类的名称。一些难以分辨的就写unknow.
+目标物种的内含子类型就按照intron_vs_gene (CRW数据库).xlsx中对应基因出现最多次数的种类来分类，要看清楚线粒体或者叶绿体。
+
+17.基因基因情况的统计：
+在v2中的cpDNA_comparsion中，运行python cpDNA_comparsion gb/ out mit/chl 出来的结果中，intron和intron ORF要自己去genbank中数一下，因为genbank的写发不一，所以比较难统计。如rRNA的数量异常，也需要去查看一下
+
+18.近缘物种基因统计。
+首先把要分析的序列的文件下载下来:asn2all -r -A accsion -v accsion.cds -f d ,
+运行V2中的gene_count里的程序(分线粒体和叶绿体），python chl_gene_count target.cds cds/ out ,用excel 打开out ,最后那几个是近缘物种没有的，需要另外统计，“-”代表有，‘*’代表没有。
+
+19把tRNA二级结构的分割并做成pdf，png，tif
+把V1生成的二级结构的文档复制到新建的文件夹，然后python split_tRNA.py tRNA.txt；就会生成很多单独的tRNA的txt。Ls *.txt |while read a ;do enscript -B -p $a.ps $a ;done
+Ls *.txt |while read a ;do ps2pdf $a.ps $a.pdf ;done .
+
+20.维恩图（Venn diagram）
+网站http://bioinfogp.cnb.csic.es/tools/venny/index.html
+在每个框内写入基因的名字即可
+
+venn.py文件：
+#!/usr/bin/python
+#-*- coding:utf-8 -*-
+import os
+import glob
+
+rs=open('r.R','w+')
+rs.write('''#install.packages("VennDiagram")
+library(VennDiagram)
+library(grid)
+library(futile.logger)
+venn.diagram(x=list(
+''')
+
+import os
+import glob
+all=[]
+flist=glob.glob('*.list')
+#print flist
+for i in flist:
+#    print i
+    vlist=i.strip().split('.')[0]
+#    print n
+    for v in vlist:
+        fc=open(i,'r').readlines()
+    #print "%s = %s"%(vlist,fc)
+    rs.write("%s = %s,"%(vlist,fc))
+
+rs.write('''),
+             height = 720, width = 720,resolution =720,
+             filename ="venn.tiff",imagetype = "tiff",
+             col="white",
+''')
+
+colors=["#FF1493", "#FF00FF","#FFFF00","#FFD700","#FFA500","#8B4513","#808080","#0000FF","#00CED1","#00FF7F","#2E8B57","#00FF00","#FAFAD2","#DC143C","#191970","#4169E1","#2F4F4F",",#EEE8AA","#FF6347",",#000000"]                                       
+alphas=[0.5, 0.5, 0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5, 0.5, 0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]
+#linew=[0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]
+counter=len(flist)
+
+fill1=colors[0:counter]
+rs.write("\t\t\t\t\t\t fill=%s,\n" % fill1)
+
+alpha1=alphas[0:counter]
+alpha2=map(str,alpha1)
+alpha3=",".join(alpha2)
+rs.write("\t\t\t\t\t\t alpha=c(%s)," % alpha3)
+
+#ln1=linew[0:counter]
+#ln2=map(str,ln1)
+#ln3=",".join(ln2)
+#rs.write("\t\t\t\t\t\t lwd=c(%s)," % ln3)
+
+rs.write('''       
+             cex=0.1,
+			 cat.cex=0.2,cat.pos=0,cat.fontface="bold",cat.fontfamily="serif",
+			 reverse=FALSE,
+			 rotation.degree =0,
+			 lwd=0.5,)
+''')
+
+rs.close()
+fpr=open('r.R','r')
+fp=open('venn.R','w+')
+for s in fpr.readlines():
+	fp.write(s.replace('[','c(').replace(']',')').replace(',)',')'))
+fp.close()
+fpr.close()
+
+os.system("rm r.R")
+
+os.system("Rscript venn.R")
+
+*************************************************************
+
+五、与cleanreads比对
+1.bowtie
+bowtie2-2.2.5比对
+samtools查看和排序，生成.bai文件
+qsub提交大型机
+
+bowtie.sh文件：
+#$ -S /bin/sh
+if [ $# -eq 0 ]; then
+        echo "Program: Package the sequecing data and statics for mtFish sequencing"
+        echo "Usage: $0 <fasta> <fq1> <fq2>"
+        exit 1
+fi
+
+ref=$1
+fq1=$2
+fq2=$3
+echo '#$ -S /bin/sh' > bow.sh
+echo "/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2-build ${ref} long" >> bow.sh
+echo "/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2 -x long -1  ${fq1} -2 ${fq2} -p 25 | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > long.srt.bam " >> bow.sh
+echo  '/hellogene/scgene01/bio/bin/samtools index long.srt.bam'  >> bow.sh
+qsub -cwd -l vf=20g bow.sh
+
+2.bwa比对
+bwa
+samtools查看和排序，生成.bai文件
+qsub提交大型机
+
+#$ -S /bin/sh
+if [ $# -eq 0 ]; then
+        echo "Program: Package the sequecing data and statics for mtFish sequencing"
+        echo "Usage: $0 <genome.fasta> <fq1> <fq2>"
+        exit 1
+fi
+
+ref=$1
+fq1=$2
+fq2=$3
+echo '#$ -S /bin/sh' > remap.sh
+echo "/hellogene/scgene01/bio/bin/bwa index ${ref}" >> remap.sh
+echo "/hellogene/scgene01/bio/bin/bwa mem -t 14 ${ref}  ${fq1} ${fq2} | /hellogene/scgene01/bio/bin/bwa view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 8 - > genome.map.bam" >> remap.sh
+echo  '/hellogene/scgene01/bio/bin/samtools index genome.map.bam'  >> remap.sh
+qsub -cwd -l vf=12g remap.sh
+
+
+=================================================================
+
+六、分子钟
+网站http://www.evolgenius.info/evolview/#mytrees/140/time
+参考年代图：https://baike.baidu.com/pic/%E5%9C%B0%E8%B4%A8%E5%B9%B4%E4%BB%A3%E8%A1%A8/3725774/0/c2cec3fdfc039245847aa73a8f94a4c27d1e2533?fr=lemma&ct=single#aid=0&pic=c8177f3e6709c93d98fff54a973df8dcd100547a
+!TimeLine TotalTime=100,TimeUnit=Millions of Years
+!TimeLineAxis
+Pos=Top,
+显示尺度，3个参数
+Ticks=3,2,1
+尺度标签颜色
+TickLabelStyle=10,grey,0,0,
+网格大小
+Grid=3
+!TimeLineStrips
+不透明度
+op=1,
+确定5条分界线的位置，显示4部分颜色，可以根据计算准确确定，如图左边处于刻度5，右边是0，则把5分为100分，根据年代图的分界值如23.6，则右边第一条线位置为5/100*23.6,这样精确到小数点后4位最好
+Strips=-1,1,2,3,5,
+颜色设置，需要注意如果最后没有小数点，则颜色左右位置是循环的，最好设置4种颜色
+StripColors=#F4F5F6,#E8E9EA，
+StripLabelStyle=12,#77787B,0,0,
+StripLabelPos=bottom,
+StripMarginPx=3 
+
+===================================================================
+
+七、SNP位点注释
+结果：
+Mutation type	Position	Samples		Gene type	Gene	Codon	Amino acid
+		WYL1	WYL3				
+SNP	1296	A	G	rRNA	16S-rRNA		
+SNP	7354	C	T	CDS	COXII	TCC->TCT	Ser->Ser
+SNP	8502	A	G	CDS	ATP6	GAA->GAG	Glu->Glu
+SNP	12774	G	A	CDS	ND5	GCC->ACC	Ala->Thr
+SNP	14503	T	C	CDS	Cytb	TTA->CTA	Leu->Leu
+
+
+snp.py
+#! /usr/bin/python
+# -*- coding: UTF-8 -*-
+import sys
+from Bio import SeqIO
+#程序是两条序列比对后，分别把他们取出再放入fa1和fa2两个文件，然后python SNP.py fa1 fa2 fa1.tbl
+#如果有3条序列，可以1和2比后用1的fa1.tbl作为输入，也可以2和3比后用1的fa1.tbl作为输入
+#运行完会报错，但是补影响结果，
+#fa1.tbl是fa1的注释文件，注意，注释文件最好是和我们注释的样式一模一样，每一个基因都应该是：
+#1    100    gene
+#            gene    cox1
+#1    100    CDS
+#            product    XXXXX
+#输出结果的位置是比对序列的位置，不是原始序列的位置，所以需要更改，即fa1出现‘-’时。大于这个位置的都需要减1
+codon={ "TTT":"Phe","TTC":"Phe","TTA":"Leu","TTG":"Leu",
+    "TCT":"Ser","TCC":"Ser","TCA":"Ser","TCG":"Ser",
+    "TAT":"Tyr","TAC":"Tyr","TAA":"Stp","TAG":"Stp",
+    "TGT":"Cys","TGC":"Cys","TGA":"Trp","TGG":"Trp",
+    "CTT":"Leu","CTC":"Leu","CTA":"Leu","CTG":"Leu",
+    "CCT":"Pro","CCC":"Pro","CCA":"Pro","CCG":"Pro",
+    "CAT":"His","CAC":"His","CAA":"Gln","CAG":"Gln",
+    "CGT":"Arg","CGC":"Arg","CGA":"Arg","CGG":"Arg",
+    "ATT":"Ile","ATC":"Ile","ATA":"Met","ATG":"Met",
+    "ACT":"Thr","ACC":"Thr","ACA":"Thr","ACG":"Thr",
+    "AAT":"Asn","AAC":"Asn","AAA":"Lys","AAG":"Lys",
+    "AGT":"Ser","AGC":"Ser","AGA":"Stp","AGG":"Stp",
+    "GTT":"Val","GTC":"Val","GTA":"Val","GTG":"Val",
+    "GCT":"Ala","GCC":"Ala","GCA":"Ala","GCG":"Ala",
+    "GAT":"Asp","GAC":"Asp","GAA":"Glu","GAG":"Glu",
+    "GGT":"Gly","GGC":"Gly","GGA":"Gly","GGG":"Gly"}
+def reverse(seq):
+    Base={'A':'T','C':'G','G':'C','T':'A'}
+    a=[]
+    for i in seq :
+        a.append(Base[i])
+    result=''.join(a)[::-1]
+    return result
+def main(fa1,fa2,tbl):
+    tbl_dic={}
+    for i in open(tbl,'r'):
+        if len(i.strip()) == 0:
+            continue
+        if i.strip()[0] !='>':
+            line=i.strip().split()
+            if line[0]=="gene":
+                gene=line[1]
+            if len(line) > 2 :
+                if line[-1] == "CDS" or line[-1] == "tRNA" or line[-1] =="rRNA" or line[-1] == "D-loop" :
+                    if int(line[0]) < int(line[1]) :
+                        start =int(line[0])
+                        end= int(line[1])
+                        strang='+'
+                    if int(line[0]) > int(line[1]):
+                        start=int(line[1])
+                        end=int(line[0])
+                        strang='-'
+                    type =line[-1]
+            if line[0] == 'product':
+                tbl_dic[gene]=[start,end,strang,type]
+    fa1_seq=SeqIO.read(fa1,'fasta').seq
+    fa2_seq=SeqIO.read(fa2,'fasta').seq
+    length=len(fa1_seq)
+    for i in range(0,length):
+        if fa1_seq[i] != fa2_seq[i]:
+            if fa1_seq[i] =='-':
+                for k,l in tbl_dic.items():
+                    if l[0] > i+1 :
+                        tbl_dic[k][0]=l[0]+1
+                    if l[1] > i+1 :
+                        tbl_dic[k][1]=l[1]+1
+            size_type='IGS'
+            size_gene=' '
+            size_strang=' '
+            for k,l in tbl_dic.items():
+                if  l[0]< i+1 < l[1]:
+                    size_gene=k
+                    size_type=l[-1]
+                    break
+            if size_type=='CDS':
+                gene_info=tbl_dic[size_gene]
+                if gene_info[2] == '+':
+                    size=i+2-gene_info[0] 
+                    num=divmod(size,3)
+                    if num[1] == 0:
+                        size_codon1=fa1_seq[i-2:i+1]
+                        size_codon2=fa2_seq[i-2:i+1]
+                    if num[1] == 1:
+                        size_codon1=fa1_seq[i:i+3]
+                        size_codon2=fa2_seq[i:i+3]
+                    if num[1] == 2 :
+                        size_codon1=fa1_seq[i-1:i+2]
+                        size_codon2=fa2_seq[i-1:i+2]
+                    print 'SNP\t%s\t%s->%s\t%s\t%s\t%s->%s\t%s->%s' % (i+1,fa1_seq[i],fa2_seq[i],gene_info[-1],size_gene,size_codon1,size_codon2,codon[size_codon1],codon[size_codon2])
+                if gene_info[2] == '-' :
+                    size=abs(i+2-gene_info[1])
+                    num=divmod(size,3)
+                    if num[1] == 0:
+                        size_codon1=reverse(fa1_seq[i-2:i+1])
+                        size_codon2=reverse(fa2_seq[i-2:i+1])
+                        if num[1] == 1:
+                                size_codon1=reverse(fa1_seq[i:i+3])
+                                size_codon2=reverse(fa2_seq[i:i+3])
+                        if num[1] == 2 :
+                                size_codon1=reverse(fa1_seq[i-2:i+1])
+                                size_codon2=reverse(fa2_seq[i-2:i+1])
+                    print 'SNP\t%s\t%s->%s\t%s\t%s\t%s->%s\t%s->%s' % (i+1,fa1_seq[i],fa2_seq[i],gene_info[-1],size_gene,size_codon1,size_codon2,codon[size_codon1],codon[size_codon2])
+            if size_type != 'CDS':
+                print 'SNP\t%s\t%s->%s\t%s\t%s' % (i+1,fa1_seq[i],fa2_seq[i],size_type,size_gene)
+main(sys.argv[1],sys.argv[2],sys.argv[3])
+
+========================================================================
+
+简单序列操作
+long_seq1.py文件，取反向序列，python long_seq1.py infile outfile
+from Bio import SeqIO
+import sys
+
+scgene, faf, outf=sys.argv
+file=open(faf,'r')
+out=open(outf,'w')
+for i in SeqIO.parse(file,'fasta'):
+	out.write('>%s\n%s\n' % (i.id,i.seq))
+out.close()
+
+************************************************************************
+long_seq2.py文件
+from Bio import SeqIO
+from Bio.Seq import Seq
+import sys
+
+scgene, faf, outf=sys.argv
+file=open(faf,'r')
+out=open(outf,'w')
+for i in SeqIO.parse(file,'fasta'):
+	out.write('>%s\n%s\n' % (i.id,i.seq))
+	a=Seq(str(i.seq))
+	c=a.reverse_complement()
+	out.write('>%s\n%s\n' % (i.id,c))
+out.close()
+
+=======================================================================
+
+七、根据物种的taxid及物种名下载其序列
+网页：NCBI——全数据库搜索——物种分类（左下边）——基因组（右上边1）点击1即可到达下载页面
+taxid	species_name
+8897	Chaetura_pelagica
+9244	Calypte_anna
+175835	Buceros_rhinoceros
+279965	Antrostomus_carolinensis
+注意：物种名的空格应用下划线替代，否则创建文件夹等步骤会出错
+
+测试是否有转录组和基因组的数据可下载，如果有则显示链接，如果没有则显示[]每个循环即物种间******分隔
+trans_proti_ts.py文件
+
+# -*- coding:utf-8 -*-
+
+import urllib
+import os
+import sys
+import re
+from bs4 import BeautifulSoup
+
+def main(list_file):
+    f=open(list_file,'r')
+    for n in f:
+        n1=n.strip().split("\t")[0]
+        n2=n.strip().split("\t")[1]
+        ln="https://www.ncbi.nlm.nih.gov/genome/?term=txid"+n1
+        connect = urllib.urlopen(ln)
+        url_html=connect.read()
+        soup= BeautifulSoup(url_html)
+#        os.system("mkdir %s" % n2)
+        a1=soup.find_all(href=re.compile("rna.fna.gz"))
+        for a11 in a1:
+            rna= a11.get("href")
+            print rna
+#            os.system("wget %s" % rna)
+        a2= soup.find_all(href=re.compile("protein.faa.gz"))
+        for a22 in a2:
+            pro= a22.get("href")
+            print pro
+#            os.system("wget %s" % pro)
+#        os.system("mv *.gz %s" % n2)
+        print "******"
+main(sys.argv[1])
+**********************************************************************
+
+下载对应的转录组和氨基酸序列，每个物种会根据物种名创建文件夹，当下载完该物种序列后会将序列移动到文件夹内，屏幕上会显示正在进行的步骤及下载进度
+
+trans_proti_dl.py文件：
+# -*- coding:utf-8 -*-
+
+import urllib
+import os
+import sys
+import re
+from bs4 import BeautifulSoup
+
+def main(list_file):
+    f=open(list_file,'r')
+    for n in f:
+        n1=n.strip().split("\t")[0]
+        n2=n.strip().split("\t")[1]
+        ln="https://www.ncbi.nlm.nih.gov/genome/?term=txid"+n1
+        connect = urllib.urlopen(ln)
+        url_html=connect.read()
+        soup= BeautifulSoup(url_html)
+        os.system("mkdir %s" % n2)
+        a1=soup.find_all(href=re.compile("rna.fna.gz"))
+        for a11 in a1:
+            rna= a11.get("href")
+            os.system("wget %s" % rna)
+        a2= soup.find_all(href=re.compile("protein.faa.gz"))
+        for a22 in a2:
+            pro= a22.get("href")
+            os.system("wget %s" % pro)
+        os.system("mv *.gz %s" % n2)
+        print "******"
+main(sys.argv[1])
+
+
+=========================================================================
+
+八、两个表格文件，根据某一列对应相同将其他几列数据添加到另一文件的前面
+在excel中可以使用=IFERROR(VLOOKUP($A2,sheet1!$A:$C,MATCH(B$1,sheet1!$1:$1,0)0))
+
+#-*- coding:utf-8 -*-
+Orecord = open('record.xls','r')
+Orbcl = open('rbcl.xls','r')
+#Frbcl=open('frbcl.xls','w')
+frbcl=open('frbcl.xls','w')
+info=[]
+for rowl in Orecord:
+    rowl=rowl.strip().split('\t')
+    info.append([rowl[0],rowl[1],rowl[2],rowl[3],rowl[4],rowl[5],rowl[6],rowl[7]])
+#print info
+
+for line in Orbcl:
+    line=line.strip().split('\t')
+    for i in info:
+        if i[0] in line[3]:
+            i.append([line[0],line[1],line[2],line[3],line[4],line[5],line[6],line[7]])
+            #print i
+            try:
+                frbcl.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (i[0],i[1],i[2],i[3],i[4],i[5],i[6],i[7],i[8][0],i[8][1],i[8][2],i[8][3],i[8][4],i[8][5],i[8][6],i[8][7]))
+            except TypeError:
+                pass
+frbcl.close()
+Orbcl.close()
+Orecord.close()
+
+==========================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

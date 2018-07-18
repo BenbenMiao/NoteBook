@@ -1301,25 +1301,32 @@ qsub -cwd -l vf=12g remap.sh
 六、分子钟
 网站http://www.evolgenius.info/evolview/#mytrees/140/time
 参考年代图：https://baike.baidu.com/pic/%E5%9C%B0%E8%B4%A8%E5%B9%B4%E4%BB%A3%E8%A1%A8/3725774/0/c2cec3fdfc039245847aa73a8f94a4c27d1e2533?fr=lemma&ct=single#aid=0&pic=c8177f3e6709c93d98fff54a973df8dcd100547a
-!TimeLine TotalTime=100,TimeUnit=Millions of Years
+
+注意，#行的内容别复制进去，网页无法识别#是注释
+!TimeLine	TotalTime=140,TimeUnit=Millions of Years
+#设置时间线，刻度总长度
 !TimeLineAxis
-Pos=Top,
-显示尺度，3个参数
-Ticks=3,2,1
-尺度标签颜色
-TickLabelStyle=10,grey,0,0,
-网格大小
+#设置时间轴
+Pos=Bottom,
+#刻度position位置在底部，有Top，Left，Bottom，Right
+Ticks=20,10,5,
+#最小刻度5，中等刻度10，大刻度为20，即(大)0_(小)5_(中)10_(小)15_(大)20
+TickLabelStyle=10,black,0,0,
+#刻度标签：字体大小，字体颜色，是否斜体，是否粗体
 Grid=3
 !TimeLineStrips
-不透明度
+#设置时间线分割
 op=1,
-确定5条分界线的位置，显示4部分颜色，可以根据计算准确确定，如图左边处于刻度5，右边是0，则把5分为100分，根据年代图的分界值如23.6，则右边第一条线位置为5/100*23.6,这样精确到小数点后4位最好
-Strips=-1,1,2,3,5,
-颜色设置，需要注意如果最后没有小数点，则颜色左右位置是循环的，最好设置4种颜色
-StripColors=#F4F5F6,#E8E9EA，
-StripLabelStyle=12,#77787B,0,0,
-StripLabelPos=bottom,
-StripMarginPx=3 
+#不透明度0-1
+Strips=-10,2.6,23.0,65.5,145.5,
+#纵向刻度分割线所在刻度，如果树的最大年为100，而设置的总刻度为140，QUATER NARY:2.6,NEOGENE:23.0,PALEOGENE:65.5,CRETACEOUS:145.5是标准时间，需要100/140*2.6=计算，当然最合适的是把总刻度也变为100，这时这几个刻度就等于标准时间
+StripColors=#FFF68F,#FFB90F,#F4A460,#7CCD7C,
+#四个世纪所区别的颜色设置
+StripLabelStyle=12,black,0,0,
+StripLabelPos=Bottom,
+#分割标签的位置
+StripMarginPx=1
+#分割线的宽度，1比较合适
 
 ===================================================================
 

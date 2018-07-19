@@ -107,7 +107,7 @@ cat *.txt > new.txt
 sudo date 042615202018.00
 （必须用root权限，date命令，参数MMDDhhmmYYYY.ss）
 
-11.安装muscle用来mv 多序列比对
+11.安装muscle用来多序列比对
 sudo apt-get install muscle
 
 12.将seqdump.txt中多个序列比对，输出fast格式，便于构树
@@ -330,7 +330,7 @@ RAxML_info.TEST
 
 在mega中查看RAxML_bestTree.TEST的进化树结构
 ==========================================================================
-Linux命令
+LINUX命令
 
 21.top 查看进程和cup占用
 22.df查看磁盘信息，df --help 
@@ -434,8 +434,53 @@ seq 10 | grep "5" -A 3
 seq 10 | grep "5" -B 3
 显示匹配某个结果的前三行和后三行，使用 -C 选项：
 seq 10 | grep "5" -C 3
+
+vim大小写替换
+vim中大小写转化的命令是gu或者gU
+形象一点的解释就是小u意味着转为小写；大U意味着转为大写.剩下的就是对这两个命令的限定（限定操作的行，字母，单词）等等
+~切换光标所在位置的字符的大小写形式，大写转换为小写，小写转换为大写
+3~将光标位置开始的3个字母改变其大小写
+gu：切换为小写，gU：切换为大写，剩下的就是对这两个命令的限定（限定行字母和单词）
+
+    ggguG：整篇文章转换为小写，gg：文件头，G：文件尾，gu：切换为小写
+    gggUG：整篇文章切换为大写，gg：文件头，G：文件尾，gU：切换为大写
+只转化某个单词
+    guw、gue
+    gUw、gUe
+    gu5w：转换 5 个单词
+    gU5w
+转换行
+    gU0 ：从光标所在位置到行首，都变为大写
+    gU$ ：从光标所在位置到行尾，都变为大写
+    gUG ：从光标所在位置到文章最后一个字符，都变为大写
+    gU1G ：从光标所在位置到文章第一个字符，都变为大写
+
+************************************************************************
+dpkg: 处理软件包 xxx (--configure)时出错 解决办法
+第一步：备份
+$ sudo mv /var/lib/dpkg/info /var/lib/dpkg/info.bk
+第二步：新建
+$ sudo mkdir /var/lib/dpkg/info
+第三步：更新
+$ sudo apt-get update
+$ sudo apt-get -f install
+如果依旧报错，是由于没有info文件夹的情况，运行提示的那个命令，sudo dpkg --configure -a,这时会报错没有info的文件夹，同时注意apt和apt-get的命令有点不同
+第四步：替换
+$ sudo mv /var/lib/dpkg/info/* /var/lib/dpkg/info.bk
+//把更新的文件替换到备份文件夹
+第五步：删除
+$ sudo rm -rf /var/lib/dpkg/info
+//把自己新建的info文件夹删掉
+第六步：还原
+$ sudo mv /var/lib/dpkg/info.bk /var/lib/dpkg/info
+//把备份的info.bk还原
 =========================================================================
 二、进化树过程
+
+13种基因类型：
+ND1,ND2,ND3,ND4,ND4L,ND4,ND6,COX1,COX2,COX3,ATP6,ATP8,CYTB
+muscle是对这13种基因的fasta文件比较的，即一次比较一个文件种多个物种的同一种类型的基因，也可以单独只比对一个基因的文件
+
 1.step1.sh文件：核苷酸，氨基酸，genbank下载
 #! -S /bin/sh
 #新建对应文件夹
@@ -3208,13 +3253,151 @@ sh s.sh
 bootstrap:以每一列为单位，随机排放各列(行的长度始终相等)，产生不同的多序列
 jackknifing:随机取一半，再随机取一半的一半，再随机取一半的一半的一半
 
+38.cutadapt去除接头:cutadapt -O 5 -m 50
+
+39.pear序列拼接:pear -x 0.1
+
+40.prinseq质量剪切:prinseq -lc_method dust -lc_threshold 40 -min_len 200
+
+41.mothur做rerefaction分析
+R做rarefaction curve稀释曲线
+
+42.R做rank-abundance曲线
+
+43.R的vegan package做species accumulation curves物种累计曲线
+
+44.R对物种分类学统计结果作图
+
+45.graphlan，metaphlan2和itol,根据每个样本的分类学比对结果，选出优势种的分类，结合物种丰度信息，以环状图显示
+
+46.pandoc:将markdown文件转为docx等格式的工具，使用python，内有latex
+pandoc file.md -o file.docx
+
+47.mafft:比对速度（Muscle>MAFFT>ClustalW>T-Coffee），比对准确性（MAFFT>Muscle>T-Coffee>ClustalW）。因此，推荐使用 MAFFT 软件进行多序列比对。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 *********************************************************************************
 
+十六、基因重排
+
+Circos 作图
+
+把snp放到环形图里面，文件夹SNP是例子，*.snp是不同样品的snp的位置，circos.conf是主程序，不知道什么原因，像基因和snp起始结束的文件第三列数值最低的的不显示，所以要加一行比其他数值要小的行：如下列红色字体，
+
+hs1 0 1537 70.0000 fill_color=yellow
+
+hs1 1538 1603 70.0000 fill_color=blue
+
+hs1 0 1 30.0000
+
+Circos.conf中karyotype=序列的大小
+
+Plots中第一个plot是修改基因的半径，颜色，file是基因起始和终止的文件，也需要 另外加一行hs1 0 1 30.0000
+
+下面的plot是snp文件的，color是线的颜色，填充颜色一般显示不出来，颜色名字前加d是加深，vd是更深，vvd是最深，变浅l同理。extend_bin  = no是必须的，这个是是否把snp连在一起的选项，
 
 
 
+基因重拍：
 
+请看基因重排文件夹，已经基本完成
+
+chromosomes                 = /hs[12]$/ 是选择显示的ID（即对应文件的第一列）
+
+===================================================================================
+
+十七、新的codonusage的做法
+1.新建一个目录，把bio/MTG/codonusage的文件夹复制到当前文件夹，cp -r ~/bio/MTG/codonusage ./ 
+2.把sqn文件复制到codonusage的文件夹内运行sh step1 *.sqn。程序出来结果的是以第一套密码子做的，所以需要更改密码子。进入CU1,根据物种的所使用的密码子的套数，运行python ../bin/change_codon.py *.csv 2 fre.csv (其中*.csv是本来存在的csv文件，2是密码的套数，目前程序只支持第2,4,5,22,23这几套的转换，其他的需到程序中添加，fre.csv是出来的结果，名字必须为fre.csv)。
+3.用wps打开fre.csv ,先把Frequency一列降序，再Amino acid一列升序（是为了使长的柱子在下面）。在后面新加入一列Countif：=COUNTIF($A$2:A2,A2)
+运行sh step2. 生成frequency.pdf和RSCU.pdf。在photoshop中对图片进行调整，另存为pdf,png,tif三种格式。模板如下图：
+5.打开RSCU.csv，格式调整为codonusage文件夹下的codonUsage模板.xls的样子，其中字体全文time new roman.1和2列列宽为12,3到5列列宽为16，除了备注行，其余行高为18.
+*********************************************************************************
+CodonUsage图的生成
+注意：是relative synonymous codon usage (RSCU)
+V_3版的作了一些整合，最后的操作如下：
+1. 先将V_3版整个文件夹拷贝到一处作为工作目录
+2. 将t.info文件（格式为：每行一个，物种id+“\t”+物种名）拷贝到工作目录下，与step1.sh同级目录下。
+注意：文件名必须为t.info，该文件中不加目标物种
+3. sh step1.sh  
+# 执行step1.sh脚本，该脚本的目的：a.在NCBI后台下载下近缘物种CDS; b.此处生成的是以NC号命名的文件，而后期要用的是以物种名命名的文件，因此需通过Underline.py程序转换,此过程会产生一个临时文件，执行完后会自动删掉；c. 为了让所有的CDS区合在一起还能正常表达，需要运行bin目录下Mcds.py将终止密码子（完全和不完全的）去掉，清洗数据，同时完成每个物种中所有CDS区的合并； 
+4. 将目标物种CDS文件拷贝到工作目录下，与step1.sh同级目录下
+asn2all -i XX.sqn -o XX.cds -f d
+# XX.sqn是目标物种的sqn文件
+# 运行完生成XX.cds文件，即需要的CDS文件
+注意：不是目标物种的基因组fasta文件！
+5.python bin/Mcds.py XX.cds > XX.fa
+# 完成目标物的清洗和整合，XX.fa为下划线连接的物种名（如：Cephalloscyllium_umbratile.fa）
+6.将产生的XX.fa文件拷贝一份到all文件夹中，拷贝一份到CU1中，修改一下CU1中的01.sh（*.fa修改为第5步中生成的XX.fa）生成了一个csv表。
+注意：
+A.此时产生的*.fa.csv文件是基于第1套密码子表，需运行Python ../bin/change_codon.py *.fa.csv 2 fre.csv (数字为第几套密码子，目前程序只有第2,4,5,22这几套密码子，其他的请自行补充)
+把其中Frequency列中为0的行删除，为了让条形图中较长的柱子在下面，需按Frequency(%)列降序排列，再按Amino acid用Counif函数
+例如：=COUNTIF($A$2:A2,A2)
+运行python get_RSCU.py fre.csv RSCU.csv
+再以此在R中画图
+Frequency图：
+Rscript Script_v3_Frequency.R fre.csv
+RSCU图：
+Rscript Script_v3_RSCU.R RSCU.csv
+
+# XX.fa.csv是执行01.sh生成的文件
+# 生成RSCU.pdf需要在PS中调整一下
+7.在CU2中(需要多个物种）
+ln -s ../all .
+ls all > all.lst
+sh 01.sh 
+# 生成raw.ma但是raw.ma是按第1套密码子表生成的，因此下步还得转化为第23套。
+vim ../bin/Codon.py添加if = usedcode==’’：...
+python ../bin/Codon.py raw.ma 23 > cu.ma2
+# raw.ma 是需改变的表；23是第23套密码子表
+把raw.ma改成cu.ma运行后产生cu.ma2文件，再在Rstudio中运行step2.R，以cu.ma为原始文件产生热图（如字体看不清晰，可打开step2.R中的fontsize中调节字体大小）。
+
+***********************************************************************************
+step1.sh文件
+
+mkdir cds
+echo 'Downloading CDS ***'
+awk '{print $1}' t.info | while read l;do asn2all -r t -A $l -o cds/$l.cds -f d;done
+echo 'Downloading OVER ***'
+python bin/Underline.py
+mkdir all
+cat U.info | while read m l;do python bin/Mcds.py cds/$m.cds > all/$l.fa;done
+rm U.info
+echo 'Remove Temp File OVER ***'
+*******************************************************************************
+step2.R文件
+library(pheatmap)
+
+# draw F.A
+ma <- read.table("cu.ma",header=TRUE,row.names=1,check.names=FALSE)
+pheatmap(ma,color=colorRampPalette(c("blue","green","red"))(50),cluster_row=FALSE,fontsize=8,fontsize_row=12)
+pheatmap(ma,color=colorRampPalette(c("blue","green","red"))(50),fontsize=8,fontsize_row=12)
+
+
+
+# draw F.B
+mat <- t(ma)
+write.table(mat,file="cu.ma.t")
+mt <- read.table("cu.ma2",header=TRUE,row.names=1,check.names=FALSE)
+mma <- t(mt)
+pheatmap(mma,color=colorRampPalette(c("blue","green","red"))(50),cluster_cols=FALSE,cluster_row=T,fontsize=8,fontsize_row=12)
+
+
+
+=====================================================================================
 
 
 

@@ -3275,10 +3275,9 @@ pandoc file.md -o file.docx
 
 47.mafft:比对速度（Muscle>MAFFT>ClustalW>T-Coffee），比对准确性（MAFFT>Muscle>T-Coffee>ClustalW）。因此，推荐使用 MAFFT 软件进行多序列比对。
 
+48.Bioconda是自动化管理生物信息软件的工具，就像 APPStore、360 软件管家一样。配置好之后，安装 seqtk 只需要一条命令 conda install seqtk
 
-
-
-
+49.trinity将kmer片段拼接，默认拼接大小为25，上限是32
 
 
 
@@ -3398,6 +3397,60 @@ pheatmap(mma,color=colorRampPalette(c("blue","green","red"))(50),cluster_cols=FA
 
 
 =====================================================================================
+Kmer
+
+python如何将给的碱基序列切成长度为4的kmer
+kmer.py文件：
+# 定义方法
+def get_list(seq,n):
+    """
+    Parameters:
+    ---------
+        seq: string
+        n : integer
+    """
+    result = []
+    for i in range(len(seq)-n+1):
+        result.append(seq[i:i+n])
+    return result
 
 
 
+一、关于Fastq
+
+FASTQ是基于文本的，保存生物序列（通常是核酸序列）和其测序质量信息的标准格式。其序列以及质量信息都是使用一个ASCII字符标示，最初由Sanger开发，目的是将FASTA序列与质量数据放到一起，目前已经成为高通量测序结果的事实标准。
+
+二、Fastq的格式
+
+FASTQ文件中每个序列通常有四行：第一行，序列标识以及相关的描述信息，以‘@’开头；第二行是序列；第三行以‘+’开头，后面是序列标示符、描述信息，或者什么也不加；第四行，是质量信息，和第二行的序列相对应，每一个序列都有一个质量评分，根据评分体系的不同，每个字符的含义表示的数字也不相同。
+
+三、关于Fasta
+
+Fasta格式也称为Pearson格式，是一种基于文本用于表示核苷酸序列或氨基酸序列的格式。在这种格式中碱基对或氨基酸用单个字母来编码，且允许在序列前添加序列名及注释。
+
+四、Fasta格式
+
+Fasta格式首先以大于号“>”开头，接着是序列的标识符；换行后是序列的描述信息。换行后是序列信息，文件每行的字母一般不应超过80个字符。序列中允许存在空格，换行，空行，直到下一个大于号或文件结束，表示该序列的结束。
+
+在clean.fq的fastq文件中取n条序列，1部分为4行内容，1行为信息，2行为碱基序列，3行为+，4行为质量分数
+seqtk sample -2 -s100 RK80125WYL1_HK7KVCCXY_L1_1.clean.fq.gz 10 > sub1.fq
+
+$ seqtk sample
+
+Usage:   seqtk sample [-2] [-s seed=11] <in.fq> <frac>|<number>
+
+Options: -s INT       RNG seed [11]
+         -2           2-pass mode: twice as slow but with much reduced memory
+[]中的是可选参数，<> 中的是必需参数。
+[-2] 内存较小的服务器上运行时，设置此参数。
+[-s] 随机数的种子。如果是 Pair-end 数据，需要保证 read1 和 read2 的种子一致，才能抽到相同的raeds。默认是 11。
+[in.fq] 输入文件
+
+<frac|number>可以输入要抽取的比例或 reads 条数。
+
+三种错
+tips:在kmer拼接过程中出错产生的分支
+bubbles：在kmer拼接过程种出错产生的环
+覆盖不均一
+
+==================================================================

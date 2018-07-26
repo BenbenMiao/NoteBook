@@ -602,7 +602,7 @@ def main(name_list, output):
         print url_name
 
         cmd_get_taxid = "%s -O rawinfo1.html -T 10 -w 10 http://www.ncbi.nlm.nih.gov/taxonomy/?term=%s" %\
-                (WGET, url_name)
+                (WGET, url_name)F
         (status, output) = commands.getstatusoutput(cmd_get_taxid)
         if status != 0:
             sys.stderr.write("ERROR: %d\n%s" % (status, output))
@@ -680,29 +680,31 @@ else:
 
 species.py文件
 #!/usr/bin/python
-f=open('species.txt','r')
-w=open('out.txt','w')
+import sys
+def main(infile,outfile):
+    f=open(infile,'r')
+    w=open(outfile,'w')
 
-for i in f:
-    i=i.strip().split('\t')
-    i2=i[1:6]
-    ii="\t".join(i2)    
-    j=i[5]
-    j=j.strip().split(';')
-    if j[0]=="<STR":
-        for jj in j:
-            if jj[-7:-1]=="iforme":
-                i[2]=jj
-            elif jj[-4:-1]=="ida":
-                i[3]=jj
-                i[4]=j[-1]
-                i1=i[1:6]
-                iii="\t".join(i1)
-                w.write("%s\n" % iii)
-    else:
-        w.write("%s\n" % ii)
-f.close()
-w.close()
+    for i in f:
+        i=i.strip().split('\t')
+        i2=i[1:6]
+        ii="\t".join(i2)
+        j=i[5]
+        j=j.strip().split(';')
+        if j[0]=="<STR":
+            for jj in j:
+                if jj[-7:-1]=="iforme":
+                    i[2]=jj
+                elif jj[-4:-1]=="ida":
+                    i[3]=jj
+                    i[4]=j[-1]
+                    i1=i[1:6]
+                    iii="\t".join(i1)
+                    w.write("%s\n" % iii)
+        else:
+            w.write("%s\n" % ii)
+main(sys.argv[1],sys.argv[2])
+
 
 =========================================================================
 
@@ -1985,8 +1987,102 @@ def main(list_file):
         os.system("mv *.gz %s" % n2)
         print "******"
 main(sys.argv[1])
+****************************************************************************
+将网页的下载页数全部显示后，CTRL+s保存网页文件为输入参数，获取，页面的物种名和id，id之后用来下载其它信息文件，拉丁名创建文件夹时注意将空格替换为下划线
+#! /usr/bin/python
+
+import urllib
+import sys
+import re
+
+def main(html_file):
+	file=open(html_file,'r')
+#	out=open(out_file,'w')
+	id=[]
+	for i in file:
+		if re.search(r'link_uid=',i.strip()):
+			id_list=i.split('link_uid=')
+			id_list=id_list[1:]
+			for i in id_list:
+				id.append(i.split("\">")[0])
+                ids="\n".join(id)
+                print ids
+	for i in id:
+		url="https://www.ncbi.nlm.nih.gov/assembly?LinkName=genome_assembly&from_uid=%s" % (i)
+		refseq_id_list1=[]
+		connect=urllib.urlopen(url)
+		url_text=connect.read()
+		html_file=open('html_file.txt','w')
+		html_file.write("%s" % (url_text))
+		html_file.close()
+		html_file_input=open('html_file.txt','r')
+		for j in html_file_input:
+			if re.search('Organism: </dt><dd>',j.strip()):
+				species_name=j.split('Organism: </dt><dd>')[1].split('(')[0]
+                name.append(species_name)
+                print name
+main(sys.argv[1])
 
 
+****************************************************************************
+根据id和物种名下载genbank，genome,trans,protein,gff文件
+# -*- coding:utf-8 -*-
+
+import urllib
+import os
+import sys
+import re
+from bs4 import BeautifulSoup
+
+def main(list_file):
+    f=open(list_file,'r')
+    for n in f:
+        n1=n.strip().split("\t")[0]
+        n2=n.strip().split("\t")[1]
+        ln="https://www.ncbi.nlm.nih.gov/genome/"+n1
+        connect = urllib.urlopen(ln)
+        url_html=connect.read()
+        soup= BeautifulSoup(url_html)
+        os.system("mkdir %s" % n2)
+        '''
+        a1=soup.find_all(href=re.compile("rna.fna.gz"))
+        for a11 in a1:
+            rna= a11.get("href")
+            print rna
+            os.system("wget %s" % rna)
+        os.system("mv *.gz %s" % n2)
+        a2= soup.find_all(href=re.compile("protein.faa.gz"))
+        for a22 in a2:
+            pro= a22.get("href")
+            print pro
+            os.system("wget %s" % pro)
+        os.system("mv *.gz %s" % n2)
+        '''
+        a3 = soup.find_all(href=re.compile("genomic.gff.gz"))
+        for a33 in a3:
+            gff=a33.get("href")
+            print gff
+            os.system("wget %s" % gff)
+        os.system("mv *.gz %s" % n2)
+        a4=soup.find_all(href=re.compile("genomic.gbff.gz"))
+        for a44 in a4:
+            gbk=a44.get("href")
+            print gbk
+            os.system("wget %s" % gbk)
+        os.system("mv *.gz %s" % n2)
+        '''
+        a5=soup.find_all(href=re.compile("genomic.fna.gz"))
+        for a55 in a5:
+            gen=a55.get("href")
+            print gen
+            os.system("wget %s" % gen)
+        os.system("mv *.gz %s" % n2)
+        '''
+        print "******"
+main(sys.argv[1])
+
+
+注意根据需要注释不需要下载的文件，注意注释’‘’号的index位置，在左端会报错
 =========================================================================
 
 八、两个表格文件，根据某一列对应相同将其他几列数据添加到另一文件的前面
@@ -3454,3 +3550,20 @@ bubbles：在kmer拼接过程种出错产生的环
 覆盖不均一
 
 ==================================================================
+java环境配置
+设置环境变量：
+
+#vi /etc/profile
+
+在最后面加入
+
+export JAVA_HOME=/usr/java/jdk1.8.0_73
+export PATH=$JAVA_HOME/bin:$PATH
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+
+按:wq保存退出。
+
+4.使配置生效
+
+source /etc/profile
+====================================================================

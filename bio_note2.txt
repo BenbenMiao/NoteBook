@@ -2792,13 +2792,17 @@ home键回到第一位，然后p键粘贴
 
 7.对于补了5次都无法补完成的gap需要建库然后在原始scaffold中直接找到
 从NNN区域前后各多取2000个碱基出来保存为gap.fa
-blast建库
+blast建库`String, `nucl', `prot''
 #python find.py seqdump.txt sequence.gff3 > seq.txt
 makeblastdb -in scaffolds.fa -dbtype nucl
 blastn
 blastn -query gap.fa -db scaffolds.fa -outfmt 6 > out.blastn
 less out.blastn
 
+makeblastdb -in scaffolds.fa -dbtype prot
+blastp
+blastp -query gap.fa -db scaffolds.fa -outfmt 6 > out.blastp
+less out.blastp
 
 KQ      NODE_7_length_120878_cov_148.579_ID_13  100.00  2000    0       0       1       2000    120842  118843  0.0     3694
 KQ      NODE_21_length_1862_cov_1156.19_ID_41   100.00  1501    0       0       2064    3564    362     1862    0.0     2772
@@ -3323,15 +3327,15 @@ ClustalX和集群上cds.sh中muscle只能比对但不能掐头去尾，可以使
 
 37.1.1核苷酸树如下：
 #$ -S /bin/sh
-evolution/raxml -s nucl.phy -m GTRGAMMAI -f a -N 1000 -T 8 -x 855500 -p 23444 -n dna_b1000
+evolution/raxml -s nucl.phy -m GTRGAMMAI -f a -N 500 -T 32 -x 855500 -p 23444 -n dna_b1000
 # -m 后接4.2算出的最佳模型
-# -t 后接cpu数
+# -t 后接cpu数，-f接-f a， 选择算法，a 代表同时做快速 bootstrap 分析和搜索最佳 似然树【默认是 -f d】 ，-p 一个用于简约推断的随机数，-N bootstrap 重复次数，一般以 1000 为宜，-T 线程数量，不超过 32， 不超过计算机的总线程数量，-n 输出文件名，-s phylip 或 fasta 格式 alignment 序列
 保存后，用qsub -cwd -l vf=10G ml.dna.sh抛到集群去运算
 如果有报错，错误原因会写在“*.o*”的文件中。
 
 37.1.2氨基酸树则如下：
 #$ -S /bin/sh
-evolution/raxml -s aa.phy -m PROTGAMMAILGF -f a -N 1000 -T 15 -x 855500 -p 23444 -n dna_b1000
+evolution/raxml -s aa.phy -m PROTGAMMAILGF -f a -N 500 -T 32 -x 855500 -p 23444 -n dna_b1000
 #LG 换成MTMAM（最佳模型为MtMam+I+G+F)
 
 37.2vim建一个名为ch.sh的脚本，脚本里写
@@ -3567,3 +3571,834 @@ export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
 
 source /etc/profile
 ====================================================================
+列出当前目录下所有的文件夹
+ls -l |awk '/^d/ {print $NF}'
+
+======================================================================
+KEGG,KOG,GO
+
+run.sh文件：
+#$1表示shell传入的第一个参数，此处为文件夹名字
+mkdir "new_"$1
+
+#kegg
+cd "new_"$1
+#判断每行的数据都不为0则取其id输出保存
+awk '{if($2 != 0 && $3 != 0 && $4 != 0 && $5 != 0 &&6 != 0 && $7 != 0)print $1".1"}' ../$1/gene_count_matrix.csv > list
+#deAnno,在all.pep.kegg.blastp.1库文件中找出第一列中有list内第一列字符串的行并保存为kegg.blastp
+python /hellogene/scgene02/RD/RNASeqRef/P135/04Enrichment/bin/deAnno.py list /hellogene/scgene02/RD/RNASeq/Oryza/all.pep.kegg.blastp.1 > kegg.blastp
+#geneAnnoKEGG
+python /hellogene/scgene02/RD/RNASeq/bin/geneAnnoKEGG.py kegg.blastp > kegg.blastp.out
+#keggGene2Pathway
+python /hellogene/scgene02/RD/RNASeq/bin/keggGene2Pathway.py kegg.blastp.out > kegg.pathway
+#filtPathwayByOrg
+python /hellogene/scgene02/RD/RNASeq/bin/KEGG/filtPathwayByOrg.py /hellogene/scgene02/RD/RNASeq/db/KEGG/listPathway/osa kegg.pathway > kegg.pathway.filt
+mkdir kegg
+python /hellogene/scgene02/RD/RNASeq/bin/KEGG/Pathway2Plot.py kegg.pathway.filt kegg
+
+#go
+#GOAnno
+python /hellogene/scgene02/RD/RNASeqRef/P135/04Enrichment/bin/deAnno.py list /hellogene/scgene02/RD/RNASeq/Oryza/all.pep_uniprot.blastp.1 > uniprot.blastp
+#GOAnno
+python /hellogene/scgene03/prj/SCG-80530-258/03.remap/bin/GOAnno.py uniprot.blastp > go.anno
+GODistribution
+python /hellogene/scgene03/prj/SCG-80530-258/03.remap/bin/GODistribution.py go.anno > go.distribution
+mkdir go
+python /hellogene/scgene02/RD/RNASeq/bin/GO/GO2Plot.py go.distribution go
+
+#kog
+#判断每行的数据都不为0则取其id输出保存
+awk '{if($2 != 0 && $3 != 0 && $4 != 0 && $5 != 0 &&6 != 0 && $7 != 0)print $1}' ../$1/gene_count_matrix.csv > kog.list
+#deAnno
+python /hellogene/scgene02/RD/RNASeqRef/P135/04Enrichment/bin/deAnno.py kog.list /hellogene/scgene03/prj/SCG-80403-239/DB/kog.result.anno > kog.anno
+mkdir kog
+python ../kog.py kog.anno kog
+cp ../kog2plot.R kog
+cd kog
+Rscript kog2plot.R
+cd ../../
+
+******************************************************************************
+deAnno.py文件：
+#! /usr/bin/env python
+import sys
+import re
+
+def main(de, anno):
+    de_dic = {}
+    for line in open(de):
+        line = line.rstrip()
+        lines = line.split()
+        de_dic[lines[0]] = 0
+
+    for line in open(anno):
+        line = line.rstrip()
+        lines = line.split()
+        if lines[0] in de_dic:
+            print line
+
+if len(sys.argv) > 1:
+    main(sys.argv[1], sys.argv[2])
+
+all.pep.kegg.blastp.1库文件和kegg.blastp结构相同，包含关系
+LOC_Os01g01010  osa:4326813     96.033  731     0       1       1       702     1       731     0.0     1450
+LOC_Os01g01019  osa:4326455     100.000 87      0       0       1       87      1       87      8.99e-51        176
+LOC_Os01g01030  osa:4326455     100.000 593     0       0       1       593     137     729     0.0     1221
+
+
+geneAnnoKEGG.py文件：
+#! /usr/bin/env python
+import sys
+import re
+
+
+def main(blast_hit):
+    anno = "/hellogene/scgene02/RD/RNASeq/db/KEGG/ko.list"
+    ko2gene = "/hellogene/scgene02/RD/RNASeq/db/KEGG/KO2Gene.join.txt"
+    blast_hit_dic = {}
+    anno_dic = {}
+    for line in open(blast_hit):
+        line = line.rstrip()
+        lines = line.split()
+        isoform_id = lines[0]
+        gene_id = lines[0]
+        if lines[0].split("_")[-1][0] == "i":
+            gene_id = lines[0].split("_")[0]
+        ref_id = lines[1]
+        hit_score = float(lines[-1])
+
+        if gene_id in blast_hit_dic:
+            if blast_hit_dic[gene_id][-1] > hit_score:
+                continue
+        blast_hit_dic[gene_id] = [isoform_id, ref_id, hit_score]
+        anno_dic[ref_id] = []
+
+    ko_anno_dic = {}
+    for line in open(anno):
+        line = line.rstrip()
+        lines = line.split("\t")
+        ko_anno_dic[lines[0]] = lines[1]
+
+    for line in open(ko2gene):
+        line = line.rstrip()
+        lines = line.split()
+        if lines[1] in anno_dic:
+            anno_dic[lines[1]] = [lines[0], ko_anno_dic[lines[0]]]
+
+    print "#unigene\tkegg\tidentity(%)\tmapLen(aa)\tmismatch(aa)\tgap(aa)\tstart(unigene)\tend(unigene)\tstart(kegg)\tend(kegg)\te-value\tscore\tannotation"
+    remove_dup_dic = {}
+    for line in open(blast_hit):
+        line = line.rstrip()
+        lines = line.split()
+        isoform_id = lines[0]
+        gene_id = lines[0]
+        if lines[0].split("_")[-1][0] == "i":
+            gene_id = lines[0].split("_")[0]
+        ref_id = lines[1]
+        if isoform_id == blast_hit_dic[gene_id][0]:
+            if gene_id in remove_dup_dic:
+                continue
+            remove_dup_dic[gene_id] = 0
+            if len(anno_dic[ref_id]) == 0:  #undistributed KID
+                continue
+            lines[0] = gene_id
+            lines[1] = "%s(%s)" % (anno_dic[ref_id][0].split(":")[1], lines[1])
+            print "%s\t%s" % ("\t".join(lines), anno_dic[ref_id][1])
+
+
+if len(sys.argv) > 1:
+    main(sys.argv[1])
+else:
+    print >>sys.stderr, "python %s <blast>" % (sys.argv[0])
+
+
+ko.list文件格式
+ko:K00001       E1.1.1.1, adh; alcohol dehydrogenase [EC:1.1.1.1]
+ko:K00002       AKR1A1, adh; alcohol dehydrogenase (NADP+) [EC:1.1.1.2]
+ko:K00003       E1.1.1.3; homoserine dehydrogenase [EC:1.1.1.3]
+KO2Gene.join.txt文件格式
+ko:K00001       dme:Dmel_CG3481
+ko:K00001       dpo:Dpse_GA17214
+ko:K00001       dan:Dana_GF14888
+ko:K00001       der:Dere_GG25120
+
+kegg.pathway文件格式
+#pathwayID      pathway koNum   geneNum genes
+00010   Glycolysis / Gluconeogenesis    32      128     LOC_Os05g44922;LOC_Os04g39420;LOC_Os06g05860;LOC_Os01g53680;LOC_Os01g09570;LOC_Os05g10650;LOC_Os09g24910;LOC_Os08g34050;LOC_Os10g26570;LOC_Os09g20820;LOC_Os03g15950;LOC_Os03g14450;LOC_Os10g08550;LOC_Os06g04510;LOC_Os09g26880;LOC_Os06g22060;LOC_Os08g25720;LOC_Os06g13810;LOC_Os02g48360;LOC_Os09g12650;LOC_Os11g10480;LOC_Os11g10510;LOC_Os01g67860;LOC_Os05g33380;LOC_Os08g02700;LOC_Os01g02880;LOC_Os06g40640;LOC_Os11g07020;LOC_Os06g14510;LOC_Os03g56460;LOC_Os09g29070;LOC_Os08g37380;LOC_Os12g05110;LOC_Os07g08340;LOC_Os11g05110;LOC_Os11g10980;LOC_Os04g58110;LOC_Os03g46910;LOC_Os01g16960;LOC_Os03g20880;LOC_Os10g42100;LOC_Os01g47080;LOC_Os12g08170;LOC_Os06g01630;LOC_Os08g33440;LOC_Os07g22720;LOC_Os06g30460;LOC_Os02g01500;LOC_Os04g40950;LOC_Os02g38920;LOC_Os02g07490;LOC_Os08g03290;LOC_Os06g45590;LOC_Os08g34210;LOC_Os10g11140;LOC_Os03g50480;LOC_Os02g51590;LOC_Os02g32490;LOC_Os04g33190;LOC_Os02g01510;LOC_Os06g01590;LOC_Os03g60370;LOC_Os05g09500;LOC_Os01g52450;LOC_Os05g44760;LOC_Os01g09460;LOC_Os01g53930;LOC_Os07g26540;LOC_Os07g09890;LOC_Os01g71320;LOC_Os05g45590;LOC_Os01g46950;LOC_Os09g15820;LOC_Os02g08030;LOC_Os08g14330;LOC_Os04g51390;LOC_Os04g56290;LOC_Os05g49430;LOC_Os05g36270;LOC_Os01g64660;LOC_Os06g45370;LOC_Os03g16050;LOC_Os03g15050;LOC_Os06g45710;LOC_Os01g58610;LOC_Os05g41640;LOC_Os02g07260;LOC_Os10g07229;LOC_Os11g10520;LOC_Os09g36450;LOC_Os01g05490;LOC_Os01g62420;LOC_Os06g13720;LOC_Os02g50620;LOC_Os04g02900;LOC_Os03g44300;LOC_Os12g42230;LOC_Os08g42410;LOC_Os09g33500;LOC_Os06g15990;LOC_Os04g45720;LOC_Os12g07810;LOC_Os11g08300;LOC_Os02g49720;LOC_Os02g43194;LOC_Os02g43280;LOC_Os04g38540;LOC_Os04g38530;LOC_Os09g02140;LOC_Os10g06720;LOC_Os02g36600;LOC_Os01g06660;LOC_Os05g39320;LOC_Os05g39310;LOC_Os03g18220;LOC_Os07g49250;LOC_Os07g02030;LOC_Os01g22520;LOC_Os05g06460;LOC_Os01g23610;LOC_Os05g06750;LOC_Os07g42924;LOC_Os02g57040;LOC_Os03g08999;LOC_Os03g09020;LOC_Os08g37140;LOC_Os05g40420;LOC_Os01g60190
+
+keggGene2Pathway.py文件
+#! /usr/bin/env python
+import sys
+import re
+
+def main(blast_hit_anno):
+    kid2pathway = "/hellogene/scgene02/RD/RNASeq/db/KEGG/KID2Pathway.list"
+    pathway_anno = "/hellogene/scgene02/RD/RNASeq/db/KEGG/pathway.list"
+    pathway_anno_dic = pathwayInfo(pathway_anno)
+
+    kid_dic = {}
+    for line in open(blast_hit_anno):
+        line = line.rstrip()
+        if re.search("^#", line):
+            continue
+        lines = line.split()
+        gid = lines[0]
+        kid = lines[1]
+        score = float(lines[11])
+        if kid not in kid_dic:
+            kid_dic[kid] = ["", 0]
+        if score > kid_dic[kid][-1]:
+            kid_dic[kid][0] = gid
+            kid_dic[kid][1] = score
+
+    kid_join_dic = {}
+    for kid in kid_dic:
+        pkid = kid.split("(")[0]
+        if pkid not in kid_join_dic:
+            kid_join_dic[pkid] = []
+        kid_join_dic[pkid].append(kid_dic[kid][0])
+
+    pathway_dic = {}
+    for line in open(kid2pathway):
+        line = line.rstrip()
+        lines = line.split()
+        map_id = lines[0].split(":")[1][3:]
+        kid = lines[1].split(":")[-1]
+        #print map_id, kid
+        if kid in kid_join_dic:
+            if map_id not in pathway_dic:
+                pathway_dic[map_id] = {}
+            pathway_dic[map_id][kid] = kid_join_dic[kid]
+
+    print "#pathwayID\tpathway\tkoNum\tgeneNum\tgenes"
+
+    for i in sorted(pathway_dic):
+        kid_num = 0
+        unigene_num = 0
+        unigene_dic = {}
+        unigenes = []
+        for j in pathway_dic[i]:
+            kid_num += 1
+            for k in pathway_dic[i][j]:
+                if k not in unigene_dic:
+                    unigene_dic[k] = 0
+                    unigenes.append(k)
+                    unigene_num += 1
+        print "%s\t%s\t%d\t%d\t%s" % (i, pathway_anno_dic[i], kid_num,\
+                unigene_num, ";".join(unigenes))
+
+
+def pathwayInfo(pathway_anno):
+    pathway_anno_dic ={}
+    for line in open(pathway_anno):
+        line = line.rstrip()
+        lines = line.split("\t")
+        map_id = lines[0].split(":")[1][3:]
+        map_anno = lines[1]
+        pathway_anno_dic[map_id] = map_anno
+
+    return pathway_anno_dic
+
+
+if len(sys.argv) > 1:
+    main(sys.argv[1])
+else:
+    print >>sys.stderr, "python %s <blast.kegg.anno>" % (sys.argv[0])
+
+filtPathwayByOrg.py文件
+#! /usr/bin/env python
+import sys
+import re
+import os
+
+def main(ref_pathway, pathway):
+    ref_dic = {}
+    ref_name = os.path.basename(ref_pathway)
+    for line in open(ref_pathway):
+        line = line.rstrip()
+        lines = line.split()
+        pathway_id = lines[0].split(":")[-1][len(ref_name):]
+        ref_dic[pathway_id] = 0
+        #print pathway_id
+
+    for line in open(pathway):
+        line = line.rstrip()
+        lines = line.split()
+        if re.search("^#", line):
+            print line
+            continue
+        if lines[0] not in ref_dic:
+            continue
+        print line
+
+if len(sys.argv) > 1:
+    main(sys.argv[1], sys.argv[2])
+else:
+    print >>sys.stderr, "python %s <refPathway> <pathway>" % (sys.argv[0])
+
+
+listPathway/osa文件格式
+path:osa00010   Glycolysis / Gluconeogenesis - Oryza sativa japonica (Japanese rice) (RefSeq)
+path:osa00020   Citrate cycle (TCA cycle) - Oryza sativa japonica (Japanese rice) (RefSeq)
+path:osa00030   Pentose phosphate pathway - Oryza sativa japonica (Japanese rice) (RefSeq)
+
+Pathway2Plot.py文件
+#! /usr/bin/env python
+import sys
+import re
+sys.path.append("/hellogene/scgene01/user/chenjiehu/bin/module/")
+import pipeline
+
+def main(pathway, outdir):
+    pipeline.mkdir(outdir)
+    keg = "/hellogene/scgene02/RD/RNASeq/db/KEGG/br08901.keg"
+    pathway_dic = {}
+    for line in open(pathway):
+        line = line.rstrip()
+        if re.search("^#", line):
+            continue
+        lines = line.split("\t")
+        pid = lines[0].split()[0]
+        genes = lines[-1].split(";")
+        if pid not in pathway_dic:
+            pathway_dic[pid] = []
+        pathway_dic[pid].extend(genes)
+
+    keg_dic = {}
+    key = ""
+    key1 = ""
+    for line in open(keg):
+        line = line.rstrip()
+        lines = line.split()
+        if re.search("^A", line):
+            key = line[4:-4]
+            keg_dic[key] = {}
+            continue
+        if re.search("^B", line):
+            key1 = " ".join(lines[1:])
+            if key1 not in keg_dic[key]:
+                keg_dic[key][key1] = {}
+            #print key1
+            continue
+        key2 = ""
+        if re.search("^C", line):
+            key2 = lines[1]
+        if key2 in pathway_dic:
+            for i in pathway_dic[key2]:
+                keg_dic[key][key1][i] = 0
+        #print line
+
+    factors = []
+    OUT = open("%s/pathway2plot.xls" % (outdir), 'w')
+    OUT.write("RootClassification\tSecondClassification\tGeneNum\n")
+    for i in sorted(keg_dic):
+        for j in sorted(keg_dic[i]):
+            if len(keg_dic[i][j]) > 0:
+                OUT.write("%s\t%s\t%d\n" % (i, j, len(keg_dic[i][j])))
+                factors.append(j)
+    OUT.close()
+
+    plot_r = "%s/pathway2plot.R" % (outdir)
+    OUT = open(plot_r, 'w')
+    OUT.write('library("ggplot2")\n')
+    OUT.write('pathway2plot <- read.table("%s/pathway2plot.xls", header = T, sep = "\\t")\n' % (outdir))
+    OUT.write('pathway2plot$SecondClassification = factor(pathway2plot$SecondClassification, levels=c(\'%s\'))\n' %\
+            ("', '".join(factors)))
+    OUT.write('pdf(file = "%s/pathwaySta.pdf", 12, 8)\n' % (outdir))
+    OUT.write('ggplot(data=pathway2plot, aes(x=SecondClassification, y=GeneNum, fill=RootClassification)) + geom_bar(stat="identity") + coord_flip() + labs(y = "Number of genes", x = "")\n')
+    OUT.write('dev.off()\n')
+    OUT.close()
+
+    cmd = "/hellogene/scgene01/bio/bin/R/bin/R CMD BATCH %s" % (plot_r)
+    pipeline.cmd_work(cmd)
+
+if len(sys.argv) > 1:
+    main(sys.argv[1], sys.argv[2])
+else:
+    print >>sys.stderr, "python %s <pathway.anno> <outdir>" % (sys.argv[0])
+
+kegg.pathway.filt文件
+#pathwayID      pathway koNum   geneNum genes
+00010   Glycolysis / Gluconeogenesis    32      128     LOC_Os05g44922;LOC_Os04g39420;LOC_Os06g05860;LOC_Os01g53680;LOC_Os01g09570;LOC_Os05g10650;LOC_Os09g24910;LOC_Os08g34050;LOC_Os10g26570;LOC_Os09g20820;LOC_Os03g15950;LOC_Os03g14450;LOC_Os10g08550;LOC_Os06g04510;LOC_Os09g26880;LOC_Os06g22060;LOC_Os08g25720;LOC_Os06g13810;LOC_Os02g48360;LOC_Os09g12650;LOC_Os11g10480;LOC_Os11g10510;LOC_Os01g67860;LOC_Os05g33380;LOC_Os08g02700;LOC_Os01g02880;LOC_Os06g40640;LOC_Os11g07020;LOC_Os06g14510;LOC_Os03g56460;LOC_Os09g29070;LOC_Os08g37380;LOC_Os12g05110;LOC_Os07g08340;LOC_Os11g05110;LOC_Os11g10980;LOC_Os04g58110;LOC_Os03g46910;LOC_Os01g16960;LOC_Os03g20880;LOC_Os10g42100;LOC_Os01g47080;LOC_Os12g08170;LOC_Os06g01630;LOC_Os08g33440;LOC_Os07g22720;LOC_Os06g30460;LOC_Os02g01500;LOC_Os04g40950;LOC_Os02g38920;LOC_Os02g07490;LOC_Os08g03290;LOC_Os06g45590;LOC_Os08g34210;LOC_Os10g11140;LOC_Os03g50480;LOC_Os02g51590;LOC_Os02g32490;LOC_Os04g33190;LOC_Os02g01510;LOC_Os06g01590;LOC_Os03g60370;LOC_Os05g09500;LOC_Os01g52450;LOC_Os05g44760;LOC_Os01g09460;LOC_Os01g53930;LOC_Os07g26540;LOC_Os07g09890;LOC_Os01g71320;LOC_Os05g45590;LOC_Os01g46950;LOC_Os09g15820;LOC_Os02g08030;LOC_Os08g14330;LOC_Os04g51390;LOC_Os04g56290;LOC_Os05g49430;LOC_Os05g36270;LOC_Os01g64660;LOC_Os06g45370;LOC_Os03g16050;LOC_Os03g15050;LOC_Os06g45710;LOC_Os01g58610;LOC_Os05g41640;LOC_Os02g07260;LOC_Os10g07229;LOC_Os11g10520;LOC_Os09g36450;LOC_Os01g05490;LOC_Os01g62420;LOC_Os06g13720;LOC_Os02g50620;LOC_Os04g02900;LOC_Os03g44300;LOC_Os12g42230;LOC_Os08g42410;LOC_Os09g33500;LOC_Os06g15990;LOC_Os04g45720;LOC_Os12g07810;LOC_Os11g08300;LOC_Os02g49720;LOC_Os02g43194;LOC_Os02g43280;LOC_Os04g38540;LOC_Os04g38530;LOC_Os09g02140;LOC_Os10g06720;LOC_Os02g36600;LOC_Os01g06660;LOC_Os05g39320;LOC_Os05g39310;LOC_Os03g18220;LOC_Os07g49250;LOC_Os07g02030;LOC_Os01g22520;LOC_Os05g06460;LOC_Os01g23610;LOC_Os05g06750;LOC_Os07g42924;LOC_Os02g57040;LOC_Os03g08999;LOC_Os03g09020;LOC_Os08g37140;LOC_Os05g40420;LOC_Os01g60190
+
+**********************************************************************************
+下载URL文件和通路图片文件
+#kegg.blastp.out由上面kegg的步骤产生,RNASeq为KEGG处理前的原始的每一个文件夹，edgeR.29736.dir选择时间最新的一个，29736数字越大月新，或者ll查看修改时间确定，gene_count_matrix.csv.DYM_vs_TYM.edgeR.DE_results在该文件夹下，产生kegg.url文件
+1.python /hellogene/scgene02/RD/RNASeq/bin/KEGG/colorPathway.py kegg.blastp.out ../RNASeq/edgeR.29736.dir/gene_count_matrix.csv.DYM_vs_TYM.edgeR.DE_results > kegg.url
+colorPathway.py文件：
+#! /usr/bin/env python
+import sys
+import re
+
+def main(blast_hit_anno, de_express):
+    kid2pathway = "/hellogene/scgene02/RD/RNASeq/db/KEGG/KID2Pathway.list"
+    pathway_anno = "/hellogene/scgene02/RD/RNASeq/db/KEGG/pathway.list"
+    pathway_anno_dic = pathwayInfo(pathway_anno)
+    express_dic = deExpress(de_express)
+
+    kid_dic = {}
+    for line in open(blast_hit_anno):
+        line = line.rstrip()
+        if re.search("^#", line):
+            continue
+        lines = line.split()
+        gid = lines[0]
+        kid = lines[1].split("(")[0]
+        if kid not in kid_dic:
+            kid_dic[kid] = []
+        kid_dic[kid].append(gid)
+
+    pathway_dic = {}
+    for line in open(kid2pathway):
+        line = line.rstrip()
+        lines = line.split()
+        map_id = lines[0].split(":")[1][3:]
+        kid = lines[1].split(":")[-1]
+        #print map_id, kid
+        if kid in kid_dic:
+            if map_id not in pathway_dic:
+                pathway_dic[map_id] = {}
+            pathway_dic[map_id][kid] = kid_dic[kid]
+
+
+    for i in sorted(pathway_dic):
+        unigene_dic = {}
+        unigenes = []
+        ko_dic = {}
+        colors = []
+        for j in pathway_dic[i]:
+            ko_dic[j] = {}
+            for k in pathway_dic[i][j]:
+                if k in express_dic:
+                    express_up_down = express_dic[k]
+                    ko_dic[j][express_up_down] = 0
+
+            color_set = "grey"
+            if len(ko_dic[j]) == 2:
+                color_set = "yellow"
+            elif "up" in ko_dic[j]:
+                color_set = "red"
+            elif "down" in ko_dic[j]:
+                color_set = "green"
+            elif len(ko_dic[j]) > 0:
+                print >>sys.stderr, "color set error", i, j, ko_dic[j]
+                sys.exit(1)
+            colors.append("%s%%09%s" % (j, color_set))
+        print "#%s" % (pathway_anno_dic[i])
+        print "http://www.kegg.jp/kegg-bin/show_pathway?map%s/%s" % (i, \
+                "/".join(colors))
+
+
+def pathwayInfo(pathway_anno):
+    pathway_anno_dic ={}
+    for line in open(pathway_anno):
+        line = line.rstrip()
+        lines = line.split("\t")
+        map_id = lines[0].split(":")[1][3:]
+        map_anno = lines[1]
+        pathway_anno_dic[map_id] = map_anno
+
+    return pathway_anno_dic
+
+
+def deExpress(de_express):
+    express_dic = {}
+    log_fc_cloum = 0
+    head = 0
+    for line in open(de_express):
+        line = line.rstrip()
+        lines = line.split()
+        if head == 0:
+            for i in xrange(len(lines)):
+                if lines[i] == "logFC":
+                    log_fc_cloum = i
+                head = 1
+            continue
+        if log_fc_cloum == 0:
+            print >>sys.stderr, "not found logFC in express file title"
+            sys.exit(1)
+
+        gene_express = float(lines[log_fc_cloum])
+        express_dic[lines[0]] = "up"
+        if gene_express < 0:
+            express_dic[lines[0]] = "down"
+    return express_dic
+
+
+if len(sys.argv) > 1:
+    main(sys.argv[1], sys.argv[2])
+else:
+    print >>sys.stderr, "python %s <blast.kegg.anno> <diffExpress>" % (sys.argv[0])
+
+
+
+#kegg.blastp.out由上面kegg的步骤产生,kegg.url由上一步产生的URL文件
+2.python /hellogene/scgene02/RD/RNASeq/bin/keggMapGet.py  kegg.blastp.out kegg.url
+keggMapGet.py文件：
+#! /usr/bin/env python
+import sys
+import re
+import os
+
+def main(kegg_anno, mark_url):
+    ko_dic = {}
+    for line in open(kegg_anno):
+        line = line.rstrip()
+        if re.search("^#", line):
+            continue
+        lines = line.split()
+        kid = lines[1].split("(")[0]
+        if kid not in ko_dic:
+            ko_dic[kid] = []
+        ko_dic[kid].append(lines[0])
+
+    name_tag = ""
+    for line in open(mark_url):
+        line = line.rstrip()
+        if re.search("^#", line):
+            name_tag = line[1:]
+            continue
+        url = line
+        name_tag = name_tag.replace("/", "or")
+        name_tag = name_tag.replace(" ", "_")
+        name_tag = name_tag.replace("(", "-")
+        name_tag = name_tag.replace(")", "-")
+        name_tag = name_tag.replace(",", "-")
+        name_tag = name_tag.replace("'", "-")
+
+        cmd = "mkdir %s" % (name_tag)
+        os.system(cmd)
+
+        cmd = "wget --convert-links -O %s/%s.htm\t\"%s\"" % (name_tag, name_tag, url)
+        os.system(cmd)
+
+        html_file = "%s/%s.htm" % (name_tag, name_tag)
+
+        for line in open(html_file):
+            line = line.rstrip()
+            if re.search("www.kegg.jp", line) and re.search("png", line):
+                png_url = line.split()[1].split('"')[1]
+                png_name = png_url.split("/")[-1]
+                cmd = "wget -O  %s/%s \"%s\"" % (name_tag, png_name, png_url)
+                #print cmd
+                os.system(cmd)
+
+        key = 0
+        out = "%s.html" % (html_file.split(".")[0])
+        OUT = open(out, 'w')
+        for line in open(html_file):
+            line = line.rstrip()
+            if re.search("button_Hb.gif", line):
+                continue
+            if re.search("</table>", line) and key == 0:
+                key = 1
+                OUT.write("%s\n" % (line))
+
+            if re.search("pathwayimage", line):
+                key = 0
+                lines = line.split()
+                lines[1] = 'src="%s"' % (lines[1].split('"')[-2].split("/")[-1])
+                line = " ".join(lines)
+
+            if key == 1:
+                continue
+
+            if re.search("K[0-9]", line):
+                new_line = line
+                for i in xrange(1, len(line) - 1):
+                    if (line[i-1] == '"' or line[i-1] == ' ') and \
+                            line[i] == "K" and \
+                            re.search("[0-9]", line[i+1]):
+                        j = i
+                        while True:
+                            j += 1
+                            if not re.search("[0-9]", line[j]):
+                                break
+                        ko_id = line[i : j]
+                        if ko_id in ko_dic:
+                            new_line = new_line.replace("\"%s" % (ko_id),\
+                                    "\"%s:%s" % (ko_id, ";".join(ko_dic[ko_id])))
+                            new_line = new_line.replace(" %s" % (ko_id),\
+                                    " %s:%s" % (ko_id, ";".join(ko_dic[ko_id])))
+                line = new_line
+
+            OUT.write("%s\n" % (line))
+        OUT.close()
+
+if len(sys.argv) > 1:
+    main(sys.argv[1], sys.argv[2])
+else:
+    print >>sys.stderr, "python %s <KEGG_Annotation.xls> <url>" % (sys.argv[0])
+*********************************************************************************
+分类并删除无关的
+在url文件夹里将其他文件移出，只保留下载的url文件夹
+ls > list
+python keggMapClass.py list > a.sh
+sh a.sh
+查看需要的分类，即pathway2plot.xls的第一列
+awk -F "\t" '{print $1}' ../kegg/pathway2plot.xls
+将唔需要的文件夹删除
+rm -rf Human_
+rm -rf Ch
+
+keggMapClass.py文件：
+#! /usr/bin/env python
+import sys
+import re
+import os
+
+
+def main(keggmap_list):
+    keg = "/hellogene/scgene02/RD/RNASeq/db/KEGG/br08901.keg"
+    keggmap_dic = {}
+    for keggmap in open(keggmap_list):
+        keggmap = keggmap.rstrip()
+        map_name = os.path.basename(keggmap)
+        keggmap_dic[map_name] = keggmap
+
+    keg_dic = {}
+    key = ""
+    key1 = ""
+    for line in open(keg):
+        line = line.rstrip()
+        lines = line.split()
+        if re.search("^A", line):
+            key = line[4:-4]
+            keg_dic[key] = {}
+            continue
+        if re.search("^B", line):
+            key1 = " ".join(lines[1:])
+            if key1 not in keg_dic[key]:
+                keg_dic[key][key1] = []
+            #print key1
+            continue
+        key2 = ""
+        if re.search("^C", line):
+            key2 = " ".join(lines[2:])
+            key2 = key2.replace("/", "or")
+            key2 = key2.replace(" ", "_")
+            key2 = key2.replace("(", "-")
+            key2 = key2.replace(")", "-")
+            key2 = key2.replace(",", "-")
+            key2 = key2.replace("'", "-")
+        if key2 in keggmap_dic:
+            keg_dic[key][key1].append(keggmap_dic[key2])
+
+    for i in sorted(keg_dic):
+        for j in sorted(keg_dic[i]):
+            if len(keg_dic[i][j]) > 0:
+                x = i.replace(" ", "_")
+                y = j.replace(" ", "_")
+                y = y.replace(":", "")
+                print "mkdir -p %s/%s" % (x, y)
+                for k in keg_dic[i][j]:
+                    print "mv %s %s/%s" % (k, x, y)
+
+
+if len(sys.argv) > 1:
+    main(sys.argv[1])
+else:
+    print >>sys.stderr, "python %s <pathway.list>" % (sys.argv[0])
+
+==================================================================================
+巴戟天寡糖结合
+根据Trinity.fasta和nr.Viridiplantae.fa产生01Unigene，02Unigene2prot，03UnigeneNProt结果
+python /hellogene/scgene01/user/huangjingchuan/bin/getSeqFromNr.py /hellogene/scgene02/RD/RNASeq/db/nr/nr /hellogene/scgene02/RD/RNASeq/db/ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/prot.accession2taxid.gz  /hellogene/scgene02/RD/RNASeq/db/taxdump/taxidlineage.dmp 33090 > nr.Viridiplantae.fa
+#建库，getSeqFromNr.py复制过来才能修改，nr在那边是nr.gz，需要解压过来，gzip -dc /hellogene/scgene02/RD/RNASeq/db/nr/nr.gz > ./nr (-d为解压缩，-c为标准输出且保留源文件，所以需要 > 和 ./nr),33090为NCBI-搜索巴戟天拉丁名Morinda officinalis-Taxonomy-Gynochthodes officinalis-Viridiplantae(植物界）-Viridiplantae-Taxonomy ID: 33090得到）
+
+each.sh
+#uniqueGene产生01Unigene文件夹及下面unigene.fa文件
+python /hellogene/scgene02/RD/RNASeq/bin/uniqueGene.py Trinity.fasta 01Unigene
+#nr.Viridiplantae.fa为上一步建立的库，01Unigene/unigene.fa为上一步产生的结果
+python /hellogene/scgene02/RD/RNASeq/bin/unigene2prot.py 01Unigene/unigene.fa 1 /hellogene/scgene02/RD/RNASeq/db/index/uniprot_plants.fa ../../db/nr.Viridiplantae.fa 02Unigene2prot 
+#02Unigene2prot/prot.fa为上一步产生的结果
+python /hellogene/scgene02/RD/RNASeq/bin/unigene2prot2.py 01Unigene/unigene.fa 02Unigene2prot/prot.fa 03UnigeneNProt
+
+==================================================================================
+1.samtools
+sudo apt install samtools
+
+2.samstat
+安装
+tar -zxcf samstat.tgz 
+cd samstat
+make
+sudo make install
+使用
+samstat <file.sam>  <file.bam>  <file.fa>  <file.fq> .... 
+
+For each input file SAMStat will create a single html page named after the input file name plus a dot html suffix.
+
+3.flexbar
+sudo apt install flexbar
+
+4.fastqc
+sudo apt install fastqc
+===========================================================================
+在母中寻子并输出子所在的母的行，VLOOKUP
+
+import sys
+  
+def main(s,m):
+    dic={}
+    for line in open(s):
+        line=line.strip()
+        lines=line.split("\t")
+        dic[lines[0]]=0
+
+    for line in open(m):
+        line=line.strip()
+        lines=line.split()
+        if lines[0] in dic:
+            print line
+main(sys.argv[1],sys.argv[2])
+
+============================================================================
+shell教程
+
+1.删除fasta格式文件后1/2的行
+num=`grep ">" $1|wc -l`
+numa=`expr $num + 1`
+sed ''"$numa"',$d' -i $1
+
+awk '{print $1}' out.blastp |sort |uniq > list
+awk '{print  $1}' list |while read a ;do grep $a out.blastp |head -n 1 ;done |sort -nk 3 |less -S
+less /hellogene/scgene02/RD/RNASeq/db/KEGG/GeneBySpecies/nta.fa
+
+列出目录的方式
+1.ls -F | grep '/$'
+ls的-F 使得文件夹后面显示/符号，然后grep 查找即可
+2.ls -l | grep '^d'|awk '{print $NF}'
+ls -l显示详细信息，grep 查找^d表示行首为d即director的文件夹，awk输出最后一列的文件夹名，推荐使用这个命令
+3.ls -ap | grep '/'
+ls的-ap可以使得文件夹显示/符号，grep查找
+4.tree -d -L 1
+tree显示树状文件结构，-d只显示目录，-L选择目录的深度后接参数
+
+===========================================================================
+构建进化树
+1.下载多个科多个属下的种的基因组文件，选择时需要基因序列数大于60(80）
+2.每个科可以选多个属，每个属由于构建进化树只能选一个物种，同属的物种进化树无太大意义
+3.将所有的合格的基因组文件放在同意目录下，重命名为前几位id
+重命名如把aa.result.fasta > aa.fasta
+ls * > list
+vim list -> :%s/.result.fasta//g (删除.result.fasta序列)
+cat list|while read a;do cp $a".result.fasta" newdir/$a".fasta" ;done
+4.如果基因组文件的id为>NODE_1_length_1946_cov_3.01319_ID_1_arhgap35需要取>arhgap35作为id
+faid.py
+import sys
+def main(fa):
+    for line in open(fa,'r'):
+        if line[0]==">" :
+            line=line.strip().split("_")
+            print ">"+line[8]
+        else:
+            line=line.strip()
+            print line
+main(sys.argv[1])
+
+5.从基因组文件id为arhgap35的文件中提取基因序列，重定向累积输出多个同类基因不同物种的基因文件
+choice_gene.py
+
+#! /usr/bin/python
+
+import sys
+from Bio import SeqIO
+clean={
+'CO1':'COX1',
+'CO2':'COX2',
+'CO3':'COX3',
+'CYTOCHROME C OXIDASE SUBUNIT 1':'COX1',
+'CYTOCHROME C OXIDASE SUBUNIT I':'COX1',
+'CYTOCHROME C OXIDASE SUBUNIT 2':'COX2',
+'CYTOCHROME C OXIDASE SUBUNIT II':'COX2',
+'CYTOCHROME C OXIDASE SUBUNIT 3':'COX3',
+'CYTOCHROME C OXIDASE SUBUNIT III':'COX3',
+'COX2A':'COX2',
+'COI':'COX1',
+'COII':'COX2',
+'COIII':'COX3',
+'COXI':'COX1',
+'COXII':'COX2',
+'COXIII':'COX3',
+'cytb':'CYTB',
+'CYTOCHROME B':'CYTB',
+'ATPASE 9':'ATP9',
+'ATPASE9':'ATP9',
+'ATPASE9':'ATP9',
+'ATPASE 6':'ATP6',
+'ATPASE6':'ATP6',
+'ATP SYNTHASE F0 SUBUNIT 6':'ATP6',
+'atp9':'ATP9',
+'atp6':'ATP6',
+'atp8':'ATP8',
+'atp 8':'ATP8',
+'ATPASE 8':'ATP8',
+'ATP 8':'ATP8',
+'cytB':'CYTB',
+'cob':'CYTB',
+'COB':'CYTB',
+'CYT B':'CYTB',
+'CYT B':'CYTB',
+'NADH1':'ND1',
+'NADH DEHYDROGENASE SUBUNIT 1':'ND1',
+'NADH2':'ND2',
+'NADH DEHYDROGENASE SUBUNIT 2':'ND2',
+'NADH3':'ND3',
+'NADH DEHYDROGENASE SUBUNIT 3':'ND3',
+'NADH4':'ND4',
+'NADH DEHYDROGENASE SUBUNIT 4':'ND4',
+'NADH4L':'ND4L',
+'NADH DEHYDROGENASE SUBUNIT 4L':'ND4L',
+'NADH5':'ND5',
+'NADH DEHYDROGENASE SUBUNIT 5':'ND5',
+'NADH6':'ND6',
+'NADH DEHYDROGENASE SUBUNIT 6':'ND6',
+'NAD1':'ND1',
+'NAD2':'ND2',
+'NAD3':'ND3',
+'NAD4':'ND4',
+'NAD4L':'ND4L',
+'NAD5':'ND5',
+'NAD6':'ND6',
+}
+def getGene(gene):
+	if gene in clean.keys():
+		name=clean[gene]
+	if gene not in clean.keys():
+		name=gene
+	return name
+def main(gene_file,cds_file):
+	name=cds_file.split('/')[-1].split('.')[0]
+	gene_list=[]
+	have=[]
+	for i in open(gene_file,'r'):
+		gene_name=i.strip()
+		gene_list.append(gene_name)
+	for i in SeqIO.parse(cds_file,'fasta'):
+		gene_name=i.id
+		new_name=getGene(gene_name)
+		if new_name in gene_list and new_name not in have:
+			out=open(new_name+'.fa','a')
+			have.append(new_name)
+			out.write('>%s\n%s\n' % (name,i.seq))
+			out.close()
+if len(sys.argv) ==3 :
+	main(sys.argv[1],sys.argv[2])
+if len(sys.argv) !=3:
+	print 'python %s <gene.list> <fa>' % sys.argv[0]
+
+6.同最先的建树一样，开始muscle比对
+ls *.fa |while read a;do muscle -in $a -out $a.ms;done
+7.由于基因数量不同，需要使得所有基因组序列数相同
+ls *.fa |while read a;do python lack.py id.list $a > $a.lack;done
+产生基因属数都为最大数量的fasta文件
+8.建模建树
+
+
+samtools
+
+
+
+
+

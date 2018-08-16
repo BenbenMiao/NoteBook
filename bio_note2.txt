@@ -4396,9 +4396,547 @@ ls *.fa |while read a;do python lack.py id.list $a > $a.lack;done
 8.建模建树
 
 
-samtools
+==================================================================
+方法 1：
+
+运行下面命令为为当前用户临时设置 HISTTIMEFORMAT 变量。这会一直生效到下次重启。
+
+# export HISTTIMEFORMAT='%F %T '
+
+方法 2：
+
+将 HISTTIMEFORMAT 变量加到 .bashrc 或 .bash_profile 文件中，让它永久生效。
+
+# echo 'HISTTIMEFORMAT="%F %T "' >> ~/.bashrc
+
+或
+
+# echo 'HISTTIMEFORMAT="%F %T "' >> ~/.bash_profile
+
+运行下面命令来让文件中的修改生效。
+
+#source~/.bashrc
+
+或
+
+#source~/.bash_profile 
+
+方法 3：
+
+将 HISTTIMEFORMAT 变量加入 /etc/profile 文件中，让它对所有用户永久生效。
+
+# echo 'HISTTIMEFORMAT="%F %T "' >> /etc/profile
+
+运行下面命令来让文件中的修改生效。
+
+#source/etc/profile
+
+====================================================
+提取prot.fa的序列长度和out.blastp的相似度和匹配长度
+#! /usr/bin/python
+
+import sys
+from Bio import SeqIO
+fa_length={}
+have={}
+for i in SeqIO.parse(sys.argv[1],'fasta'):
+    fa_length[i.id]=len(i.seq)
+for i in open(sys.argv[2],'r'):
+    line=i.strip().split()
+    have.setdefault(line[0],0)
+    if have[line[0]] == 1 :
+        continue
+    print "%s\t%s\t%s/%s" % (line[1],fa_length[line[1]],line[2],line[3])
+    have[line[0]]+=1
+
+============================================
+cd new_RNASeq
+awk '{if($2 != 0 && $3 != 0 && $4 != 0 && $5 != 0 &&6 != 0 && $7 != 0)print $1}' ../RNASeq/gene_count_matrix.csv > list
+python /hellogene/scgene02/RD/RNASeqRef/P135/04Enrichment/bin/deAnno.py list /hellogene/scgene02/RD/RNASeq/Oryza/all.pep.kegg.blastp.2 > kegg.blastp
+python /hellogene/scgene02/RD/RNASeq/bin/geneAnnoKEGG.py kegg.blastp > kegg.blastp.out
+python /hellogene/scgene02/RD/RNASeq/bin/keggGene2Pathway.py kegg.blastp.out > kegg.pathway
+python /hellogene/scgene02/RD/RNASeq/bin/KEGG/filtPathwayByOrg.py /hellogene/scgene02/RD/RNASeq/db/KEGG/listPathway/osa kegg.pathway > kegg.pathway.filt
+mkdir kegg
+python /hellogene/scgene02/RD/RNASeq/bin/KEGG/Pathway2Plot.py kegg.pathway.filt kegg
+
+
+===========================================
+平均深度
+ # -*- coding: utf-8 -*- 
+'''''''''''''''''''''''''''''''''''''''''''''
+在多序列的fasta文件remap到fastq后，会产生一个map.dp
+的文件，将其拷贝至一处，运行python averdep.py map.dp
+会产生一个map.dp.out的文件，这个文件第一列是多序列的fasta
+文件中的序列id，第二列是多序列的fasta文件的序列的平均深度
+（注：在remap的时候序列描述行中如果有空格remap会只取第一个空格前的部分作为id）
+Author: lurui@scgene.com
+Date: 2016.4.20
+'''''''''''''''''''''''''''''''''''''''''''''
+from __future__ import division
+import re
+import sys
+from Bio import SeqIO
+
+def main(depfile):
+    outfile = open(depfile+'.out', 'w')
+    dep ={}
+    dep1={}
+    fa_len={}
+    for i in SeqIO.parse(fa,'fasta'):
+	fa_len[i.id]=len(i.seq)
+    for i in open(depfile, 'r'):
+	eachlst=i.strip().split()
+        #eachlst = re.findall(r'\w+', i)
+        seqid = eachlst[0]
+        seqdep = int(eachlst[-1])
+        dep.setdefault(seqid, []).append(seqdep)
+    	dep1.setdefault(seqid,0)
+	dep1[seqid]=dep1[seqid]+1
+    newdep ={}
+    for k, v in dep.items():
+        averdep = average(v)
+        newdep[k]=[averdep,round(float(dep1[k])/fa_len[k],2)]
+    sortdep = sorted(newdep.iteritems(), key = lambda d:d[1], reverse=True)
+    print >> outfile, '%s\t%s\t%s' %('Seqid', 'Average_depth','cov')
+    for j in sortdep:
+        print >> outfile, '%s\t%s\t%s' %(j[0], j[1][0],j[1][1])
+    outfile.close()
+    
+def average(lst):
+    num = len(lst)
+    summary = sum(lst)
+    aver = round(summary / num, 2)
+    return aver
+    
+if __name__=='__main__':
+    if len(sys.argv) == 3:
+        scgene, depfile, fa= sys.argv
+        main(depfile)
+    else:
+        print 'Usage: <python> <script> <depthfile>'
+        exit(2)
+======================================================
+sudo apt install tophat2
+sudo apt install bowtie2
+sudo apt install hisat2
+sudo apt install cufflinks
+转录组本组装（利用Cufflinks），转录本与已有基因组注释比较（利用Cuffcompare）、合并（利用Cuffmerge），转录组本差异表达分析（利用Cuffdiff）。
+
+下载hisat-x64包
+tar -zxf ***.gz
+sudo mv hisat_dir /usr/local/bin
+vim ~/.bashrc
+ctrl+G
+export PATH="/usr/local/bin/hisat_dir/:$PATH"
+source ~/.bashrc
+注意:$PATH不可少
+
+RNA-Seq基因组比对工具HISAT2           
+
+HISAT2是TopHat2/Bowti2的继任者，使用改进的BWT算法，实现了更快的速度和更少的资源占用，作者推荐TopHat2/Bowti2和HISAT的用户转换到HISAT2。
+官网：
+https://ccb.jhu.edu/software/hisat2/index.shtml
+
+建立基因组索引
+hisat2-build –p 4 genome.fa genome
+
+建立基因组+转录组+SNP索引：
+bowtie2的索引只有基因组序列信息，tophat2比对时，转录组信息通过-G参数指定。HISAT2建立索引时，就应该把转录组信息加进去。
+HISAT2提供两个Python脚本将GTF文件转换成hisat2-build能使用的文件：
+extract_exons.py Homo_sapiens.GRCh38.83.chr.gtf > genome.exon
+
+extract_splice_sites.py Homo_sapiens.GRCh38.83.chr.gtf > genome.ss
+
+此外，HISAT2还支持将SNP信息加入到索引中，这样比对的时候就可以考虑SNP的情况。这仍然需要将SNP文件转换成hisat2-build能使用的文件：
+extract_snps.py snp142Common.txt > genome.snp
+
+最后，将基因组、转录组、SNP建立索引：
+hisat2-build -p 4 genome.fa --snp genome.snp --ss genome.ss --exon genome.exon genome_snp_tran
+
+官网提供了人和小鼠的索引文件下载，压缩包有make_grch38_tran.sh文件，详细记录了创建索引的过程。
+运行HISAT2
+hisat2 -p 16 -x ./grch38_tran/genome_tran -1 SRR534293_1.fastq -2 SRR534293_2.fastq –S SRR534293.sam
+
+-x 指定基因组索引
+-1 指定第一个fastq文件
+-2 指定第二个fastq文件
+-S 指定输出的SAM文件
+更多参数请查看HISAT2的操作手册：
+https://ccb.jhu.edu/software/hisat2/manual.shtml
+
+一个亮点是有一个选项可以直接连接到SRA数据库  这省了不小功夫
+–sra-acc <SRA accession number>
+输入SRA登录号，比如SRR353653，SRR353654。多组数据之间使用逗号分隔。HISAT将自动下载并识别数据类型，进行比对。
+
+但是也面临不少问题：
+1.数据下载速度？效率问题？
+2.SRA解压的是raw reads 会有低质量reads和adapter混进去  如何过滤？
+
+
+/hellogene/scgene02/RD/RNASeqRef/bin/hisat2-2.1.0/hisat2-build -p 32 /hellogene/scgene01/DataBase/Special/Oryza_sativa/Japonica/msu7.0/all.con TYM1_remap/genome_hisat
+/hellogene/scgene02/RD/RNASeqRef/bin/hisat2-2.1.0/hisat2 -p 32 --dta -5 20 -3 20 -x TYM1_remap/genome_hisat -1 /hellogene/scgene03/prj/SCG-80530-258/01.fq/TYM1_RRA126335-V_1.clean.fq.gz.fq -2 /hellogene/scgene03/prj/SCG-80530-258/01.fq/TYM1_RRA126335-V_2.clean.fq.gz.fq |/hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > TYM1_remap/hisat2.srt.bam
+/hellogene/scgene02/RD/RNASeqRef/bin/stringtie-1.3.3b.Linux_x86_64/stringtie -G /hellogene/scgene01/DataBase/Special/Oryza_sativa/Japonica/msu7.0/all.gff3 -l T2 -o TYM1_remap/TYM1.gtf -e -p 8 -A TYM1_remap/TYM1.xls -B TYM1_remap/hisat2.srt.bam
+
+
+===========================================
+stringtie安装
+下载stringtie-1.3.4d.Linux_x86_64.tar.gz
+tar zxf stringtie-1.3.4d.Linux_x86_64.gz
+sudo mv stringtie-1.3.4d.Linux_x86_64 /usr/local/bin
+echo PATH="/usr/local/bin/stringtie-1.3.4d.Linux_x86_64/:$PATH" >> ~/.bashrc
+source ~/.bashrc
+一定注意echo 后是 >>追加而非> 覆盖
+
+======================================
+安装ballgown
+source("http://bioconductor.org/biocLite.R")
+biocLite("ballgown")
+
+=--==============================================
+MECAT  mecat.sh文件
+#$ -S /bin/sh
+/hellogene/scgene01/bio/toinstall/MECAT-master/Linux-amd64/bin/mecat2pw -j 0 -k 1 -g 1 -d 01.fq/all.fastq -o SD.fa.pm.can -w MECAT -n 50 -t 32 -a 1 
+/hellogene/scgene01/bio/toinstall/MECAT-master/Linux-amd64/bin/mecat2cns -i 0 -t 32 SD.fa.pm.can 01.fq/all.fastq -a 400 -c 3 -l 10000 MECAT_SD.fa
+/hellogene/scgene01/bio/toinstall/MECAT-master/Linux-amd64/bin/extract_sequences MECAT_SD.fa MECAT_SD_25x.fasta 20000000 25
+/hellogene/scgene01/bio/toinstall/MECAT-master/Linux-amd64/bin/mecat2canu -trim-assemble -p SD -d SD genomeSize=20000000 ErrorRate=0.3 maxMemory=100 maxThreads=32 useGrid=0 Overlapper=mecat2asmpw -pacbio-corrected MECAT_SD_25x.fasta.fasta
+
+https://github.com/xiaochuanle/MECAT#S-installation
+
+
+    Step 1, using mecat2pw to detect overlapping candidates
+
+mecat2pw -j 0 -d ecoli_filtered.fastq -o ecoli_filtered.fastq.pm.can -w wrk_dir -t 16
+
+    Step 2, correct the noisy reads based on their pairwise overlapping candidates.
+
+mecat2cns -i 0 -t 16 ecoli_filtered.fastq.pm.can ecoli_filtered.fastq corrected_ecoli_filtered
+
+    Step 3, extract the longest 25X corrected reads
+
+extract_sequences corrected_ecoli_filtered.fasta corrected_ecoli_25x.fasta 4800000 25
+
+    Step 4, assemble the longest 25X corrected reads using mecat2cacu
+
+mecat2canu -trim-assemble -p ecoli -d ecoli genomeSize=4800000 ErrorRate=0.02 maxMemory=40 maxThreads=16 useGrid=0 O
 
 
 
+/etc/profile
+PATH=$PATH:/hellogene/scgene01/bio/bin/MECAT/Linux-amd64/bin/
+export PATH
+PATH=$PATH:/hellogene/scgene01/bio/bin/DEXTRACTOR/
+export PATH
+CFLAGS="-I/hellogene/scgene01/bio/include/"
+export CFLAGS
+LDFLAGS="-L/hellogene/scgene01/bio/lib/"
+export LDFLAGS
 
+===========================================================
+kmer.sh
+#$ -S /bin/sh
+mkdir K96
+/hellogene/scgene03/RD/RADPlus/bin/SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K96/genome -K 96 -p 32
+mkdir K127
+/hellogene/scgene03/RD/RADPlus/bin/SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o K127/genome -K 127 -p 32
+
+
+remap.sh文件
+#$ -S /bin/sh
+/hellogene/scgene01/bio/bin/bwa index all.cdna
+/hellogene/scgene01/bio/bin/bwa mem -t 14 all.cdna  ../../01.fq/DYM2_RRA126333-V_1* ../../01.fq/DYM2_RRA126333-V_2* | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - |/hellogene/scgene01/bio/bin/samtools sort -@ 8 - > genome.map.bam
+/hellogene/scgene01/bio/bin/samtools index genome.map.bam
+/hellogene/scgene01/bio/bin/samtools depth genome.map.bam > map.dp
+====================================================================
+
+首先，我们应该做一下质控。如果质控不合格，就需要一些处理，比如去接头、去除量的reads。
+
+（1）去除测序数据中的接头(用到的是fastx_toolkit里面的fastx_clipper工具)：
+
+
+Usage: fastx_clipper [-h] [-a ADAPTER] [-D] [-l N] [-n] [-d N] [-c] [-C] [-o] [-v] [-z] [-i INFILE] [-o OUTFILE]  #去掉接头序列
+
+ [-a ADAPTER] =接头序列（默认为CCTTAAGG）
+
+ [-l N]       = 忽略那些碱基数目少于N的reads，默认为5
+
+ [-d N]       = 保留接头序列后的N个碱基默认  -d 0
+
+ [-c]         = 放弃那些没有接头的序列.
+
+ [-C]         = 只保留没有接头的序列.
+
+ [-k]         = 报告只有接头的序列.
+
+ [-n]         = 保留有N多序列，默认不保留
+
+ [-v]         =详细-报告序列编号
+
+ [-z]         =压缩输出.
+
+ [-D]       = 输出调试结果.
+
+ [-M N]   =要求最小能匹配到接头的长度N，如果和接头匹配的长度小于N不修剪
+
+ [-i INFILE]  = 输入文件
+
+ [-o OUTFILE] = 输出文件
+
+Example: fastx_clipper -a AGATCGGAAGAGCACACG -l 25 -d 0 -Q 33 -i SRR306394_1.fastq -o SRR306394_1_trimmed.fastq
+(注：-l参数，即忽略那些碱基数目少于N的reads。默认的是5，而对于tophat来说，如果reads长度小于20，就会发出警告。因此，考虑到充分利用这些测序数据同时不损失比对的特异性，这里-l参数，取值为25。-Q参数，对于illumina测序来说，这个参数也是必须要加的，因为illumina测序在给单个碱基作质量打分的时候，加上了33，然后才转成的ASC II, 因此在这里需要加 -Q 33. 否则就会报这样的错误“fastx_clipper: Invalid quality score value (char '#' ord 35 quality value -29) on line 4.”)
+
+
+（2）去除测序数据中的低质量reads(用到的是fastx_toolkit里面的fastq_quality_filter工具)：
+Usage:fastq_quality_filter [-h] [-v] [-q N] [-p N] [-z] [-i INFILE] [-o OUTFILE]过滤低质量序列
+
+ [-q N]       = 最小的需要留下的质量值
+
+ [-p N]       = 每个reads中最少有百分之多少的碱基需要有-q的质量值
+
+ [-z]         =压缩输出
+
+ [-v]       =详细-报告序列编号，如果使用了-o则报告会直接在STDOUT，如果没有则输入到STDERR
+
+Example: fastq_quality_filter -q 20 -p 80 -Q 33 -i SRR306394_1.fastq -o SRR306394_1_filtered.fastq
+(注：-q参数，即是指最小需要留下的质量值，这里需要保留Q20(99.99%)以上的，所以对应的是20。-p参数，即是指每个reads中最少有百分之多少的碱基需要有-q的质量值，这里我们要求的是一条reads中最少有80%以上的碱基质量值达到Q20我们才作保留，因此对应的是80. -Q参数，对于illumina测序来说，这个参数也是必须要加的，因为illumina测序在给单个碱基作质量打分的时候，加上了33，然后才转成的ASC II, 因此在这里需要加 -Q 33. 否则就会报这样的错误“fastx_clipper: Invalid quality score value (char '#' ord 35 quality value -29) on line 4.”)
+(注：如果在做fastq_quality_filter之后，QC结果仍然可以看到reads的尾部有低质量的reads,此时可以将-p参数调大，比如调至90或者99)。
+========================================================
+比对工具
+
+1.TopHat2： –no-coverage-search
+
+http://ccb.jhu.edu/software/tophat/index.shtml
+
+2.STAR: -twopassMode Basic –outFilterType BySJout
+
+https://github.com/alexdobin/STAR/releases
+
+3.HISAT2 2.0.1-beta –dta (or –dta-cufflinks)
+
+http://www.ccb.jhu.edu/software/hisat/index.shtml
+
+4.RASER 0.52 -b 0.03
+
+https://www.ibp.ucla.edu/research/xiao/RASER.html
+
+
+有参考转录本组装工具
+
+1.Cufflinks 2.2.1 –frag-bias-correct
+
+http://cole-trapnell-lab.github.io/cufflinks/
+
+2.StringTie 1.2.1 -v -B
+
+http://www.ccb.jhu.edu/software/stringtie/
+
+
+无参考转录本组装工具
+
+1.SOAPdenovoTrans 1.04 -K 25
+
+https://github.com/aquaskyline/SOAPdenovo-Trans/
+
+2.Oases 0.2.09 (Velvetv1.2.10) (velveth haslength: 25) (velvetg options: -read trkg yes)
+
+http://www.ebi.ac.uk/~zerbino/oases/
+
+3. Trinity 2.1.1 –normalize reads
+
+http://trinityrnaseq.sourceforge.net/
+
+
+三代长read分析工具
+
+1.LoRDEC 0.6 -k 23 -s 3
+
+http://atgc.lirmm.fr/lordec/
+
+2.GMAP 12/31/15 -f 1
+
+http://research-pub.gene.com/gmap/
+
+3. STARlong 2.5.1b
+
+https://github.com/alexdobin/STAR/releases
+
+Followed the recommended options :
+
+–outSAMattributes NH HI NM MD
+
+–readNameSeparator space
+
+–outFilterMultimapScoreRange 1
+
+–outFilterMismatchNmax 2000
+
+–scoreGapNoncan -20
+
+–scoreGapGCAG -4
+
+–scoreGapATAC -8
+
+–scoreDelOpen -1
+
+–scoreDelBase -1
+
+–scoreInsOpen -1
+
+–scoreInsBase -1
+
+–alignEndsType Local
+
+–seedSearchStartLmax 50
+
+–seedPerReadNmax 100000
+
+–seedPerWindowNmax 1000
+
+–alignTranscriptsPerReadNmax 100000
+
+–alignTranscriptsPerWindowNmax 10000
+
+–outSAMstrandField intronMotif
+
+–outSAMunmapped Within
+
+4. IDP 0.1.9
+
+https://www.healthcare.uiowa.edu/labs/au/IDP/
+
+
+定量工具
+
+1. eXpress 1.5.1 (bowtie2 v2.2.7) (bowtie2 options: -a -X 600 –rdg 6,5 –rfg 6,5 –score-min L,-.6,-.4 –no-discordant –no-mixed)
+
+https://pachterlab.github.io/eXpress/index.html
+
+2. kallisto 0.42.4
+
+http://pachterlab.github.io/kallisto/about.html
+
+3. Sailfish 0.9.0
+
+http://www.cs.cmu.edu/~ckingsf/software/sailfish/
+
+4. Salmon-Aln 0.6.1
+
+https://github.com/COMBINE-lab/salmon
+
+5. Salmon-SMEM 0.6.1
+
+https://github.com/COMBINE-lab/salmon
+
+index: –type fmd
+
+quant: -k,19
+
+6. Salmon-Quasi 0.6.1
+
+https://github.com/COMBINE-lab/salmon
+
+index: –type quasi -k 31
+
+7. featureCounts 1.5.0-p1 -p -B -C
+
+http://subread.sourceforge.net/
+
+
+差异表达分析工具
+
+1. DESeq2 1.14.1
+
+http://bioconductor.org/packages/release/bioc/html/DESeq2.html
+
+2. edgeR 3.16.5
+
+http://www.bioconductor.org/packages/release/bioc/html/edgeR.html
+
+3. limma 3.30.7
+
+http://bioconductor.org/packages/release/bioc/html/limma.html
+
+4. Cuffdiff 2.2.1
+
+–frag-bias-correct –emit-count-tables
+
+http://cole-trapnell-lab.github.io/cufflinks/
+
+5. Ballgown 2.6.0
+
+https://github.com/alyssafrazee/ballgown
+
+6. sleuth 0.28.1
+
+https://github.com/pachterlab/sleuth
+
+
+变异分析工具
+
+
+1. SAMtools 1.2 (bcftools v1.2)
+
+samtools mpileup -C50 -d 100000
+
+https://github.com/samtools/samtools
+
+2. bcftools filter -s LowQual -e ‘%QUAL<20 ——="" dp="">10000’
+
+https://github.com/samtools/bcftools
+
+3.GATK v3.5-0-g36282e4 (picard 1.129)
+
+https://software.broadinstitute.org/gatk/download/
+
+Picard AddOrReplaceReadGroups: SO=coordinate
+
+Picard MarkDuplicates: CREATE INDEX=true VALIDATION STRINGENCY=SILENTGATK
+
+SplitNCigarReads: -rf ReassignOneMappingQuality -RMQF 255 -RMQT 60
+
+-U ALLOW N CIGAR READSGATK
+
+HaplotypeCaller: -stand call conf 20.0
+
+-stand emit conf 20.0 -A StrandBiasBySample
+
+-A StrandAlleleCountsBySampleGATK
+
+VariantFiltration: -window 35 -cluster 3 -filterName FS -filter
+
+“FS >30.0” -filterName QD -filter “QD <2.0”< span="">
+
+RNA编辑
+
+
+1. GIREMI 0.2.1
+
+https://github.com/zhqingit/giremi
+
+2. Varsim 0.5.1
+
+https://github.com/bioinform/varsim
+
+
+基因融合
+
+1.FusionCatcher 0.99.5a beta
+
+https://github.com/ndaniel/fusioncatcher
+
+2.JAFFA 1.0.6
+
+https://github.com/Oshlack/JAFFA
+
+3.SOAPfuse 1.27
+
+http://soap.genomics.org.cn/soapfuse.html
+
+4.STAR-Fusion 0.7.0
+
+https://github.com/STAR-Fusion/STAR-Fusion
+
+5.TopHat-Fusion 2.0.14
+
+http://ccb.jhu.edu/software/tophat/fusion_index.shtml
+================================================================
 

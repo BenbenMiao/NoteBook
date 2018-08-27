@@ -57,6 +57,10 @@ ml.dna.sh文件：
 /evolution/raxml -s nucl.phy -m GTRGAMMAI -f a -N 1000 -T 8 -x 855500 -p 23444 -n dna_b1000
 #evolution/raxml是raxml软件的安装目录的命令，nucl.phy是核苷酸转成的phylip文件，GTRGAMMAI表示最优模型为GTR+GAMMA+I,-m 后接算出的最佳模型-t 后接cpu数，保存后，用qsub -cwd -l vf=10G ml.dna.sh抛到集群去运算如果有报错，错误原因会写在“*.o*”的文件中。
 
+
+保存等值长为Topologic
+非等值长为Phylogentic
+
 如是氨基酸树则如下：
 #$ -S /bin/sh
 /evolution/raxml -s aa.phy -m PROTGAMMAILGF -f a -N 1000 -T 15 -x 855500 -p 23444 -n dna_b1000
@@ -2379,8 +2383,8 @@ mkdir 01.fq
 cd 01.fq
 ln -s /hellogene/scgene01/rawdata/SCG-80507-250/2.cleandata/s80510SJYL_DSW63405-V/*.gz .
 cd ..
-python readsQC.py step1 01.fq/*gz	#fastqc，产生相应的表格数据文件
-python readsQC.py step2 01.fq/*gz	#提交到多线程任务计算
+python readsQC.py step1 01.fq/*gz	#fastqc，产生相应的表格数据文件查看Q20和Q30的值
+python readsQC.py step2 01.fq/*gz	#提交到多线程任务计算，大概需要2小时
 
 ************************************************************************
 readsQC.py文件
@@ -3328,6 +3332,7 @@ ClustalX和集群上cds.sh中muscle只能比对但不能掐头去尾，可以使
 37.1.1核苷酸树如下：
 #$ -S /bin/sh
 evolution/raxml -s nucl.phy -m GTRGAMMAI -f a -N 500 -T 32 -x 855500 -p 23444 -n dna_b1000
+HKY+I+G=HKYGAMMAI
 # -m 后接4.2算出的最佳模型
 # -t 后接cpu数，-f接-f a， 选择算法，a 代表同时做快速 bootstrap 分析和搜索最佳 似然树【默认是 -f d】 ，-p 一个用于简约推断的随机数，-N bootstrap 重复次数，一般以 1000 为宜，-T 线程数量，不超过 32， 不超过计算机的总线程数量，-n 输出文件名，-s phylip 或 fasta 格式 alignment 序列
 保存后，用qsub -cwd -l vf=10G ml.dna.sh抛到集群去运算
@@ -4298,6 +4303,33 @@ def main(fa):
 main(sys.argv[1])
 
 5.从基因组文件id为arhgap35的文件中提取基因序列，重定向累积输出多个同类基因不同物种的基因文件
+ls ../*.fa |while read a;do python ../../choice_gene.py ../allgene.list $a;done
+
+list3里是fasta文件里的id如arhgap35共103种
+ankrd11.fa   fbxl14b.fa   lig4.fa          ptchd4.fa            stox2a.fa
+ANKRD50.fa   fem1a.fa     LOC100333177.fa  pwwp2b.fa            syne1b.fa
+apc2.fa      fign.fa      LOC100537710.fa  rag1.fa              tanc2b.fa
+arhgap35.fa  filip1l.fa   LOC572016.fa     RAG2.fa              tenm3.fa
+ash1l.fa     flrt2.fa     LOC794462.fa     rassf10b.fa          tmem151b.fa
+b3galt2.fa   frmpd3.fa    LOC799850.fa     rnf213.fa            trip11.fa
+bach2b.fa    ftr15.fa     mab21l2.fa       ror2.fa              tshz1.fa
+bcl11ba.fa   fzd7a.fa     map1ab.fa        SACS.fa              TTN.fa
+bend3.fa     gpatch8.fa   mogs.fa          sall4.fa             tubb2.fa
+ccdc177.fa   GPER.fa      mycbp2.fa        scn8ab.fa            tulp4a.fa
+celsr2.fa    grin2aa.fa   nkrf.fa          sema6e.fa            vcpip1.fa
+chpfa.fa     hivep1.fa    nod2.fa          sh3bp4.fa            zbed4.fa
+chsy1.fa     hsp70l.fa    odz4.fa          si:ch211236k19.7.fa  zc3h12b.fa
+cilp.fa      igsf9bb.fa   otud7b.fa        si:dkey151g22.1.fa   zeb2b.fa
+cnr1.fa      iqsec1.fa    pcdh11.fa        skor1b.fa            zgc:103511.fa
+dopey1.fa    kcna2b.fa    pdzrn3b.fa       slc18a3a.fa          zic5.fa
+dsela.fa     kcnd2.fa     plagl2.fa        slc8a4a.fa           znf319.fa
+elfn1.fa     kcnf1a.fa    pomgnt2.fa       slitrk3.fa           znf536.fa
+enc1.fa      kiaa2022.fa  pou3f2b.fa       slitrk4.fa
+extl3.fa     klhl11.fa    ppl.fa           socs6.fa
+FAT1.fa      lats2.fa     prdm11.fa        specc1la.fa
+
+
+
 choice_gene.py
 
 #! /usr/bin/python
@@ -4388,13 +4420,103 @@ if len(sys.argv) ==3 :
 if len(sys.argv) !=3:
 	print 'python %s <gene.list> <fa>' % sys.argv[0]
 
-6.同最先的建树一样，开始muscle比对
+7.同最先的建树一样，开始muscle比对
 ls *.fa |while read a;do muscle -in $a -out $a.ms;done
-7.由于基因数量不同，需要使得所有基因组序列数相同
-ls *.fa |while read a;do python lack.py id.list $a > $a.lack;done
-产生基因属数都为最大数量的fasta文件
-8.建模建树
+6.由于每种基因里物种的数量不同（每个物种不一定含有所有基因），为了让每个基因文件在比对后都有所有物种的基因序列，没有的也为---填充
+mkdir ms
+mv *.ms ms
+ls *.ms |while read a;do python lack.py id.list $a > $a.lack;done
+注意：由于比对后的序列的id是没有小数点及后的数字，所以id.list注意要保证没有小数的且和比对后的序列里的id一致
+lack.py
+#1 /usr/bin/python
 
+import sys
+from Bio import SeqIO
+
+def main(accession,fa):
+        dic={}
+        for i in SeqIO.parse(fa,'fasta'):
+                dic[i.id]=i.seq
+                length=len(i.seq)
+        for i in open(accession,'r'):
+                line=i.strip().split()
+                name=line[0]
+                if name in dic.keys():
+                        print '>%s\n%s' % (name,dic[name])
+                if name not in dic.keys():
+                        print '>%s\n%s' % (name,'-'*length)
+if len(sys.argv) ==3 :
+        main(sys.argv[1],sys.argv[2])
+if len(sys.argv) !=3:
+        print 'python %s <accession.list> <fa>' % sys.argv[0]
+
+产生基因属数都为最大数量的fasta文件
+8.产生cds.fsa文件
+# -*- coding: utf-8 -*-
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+在获取共同基因后（一些*.fa.ms文件），再将其拷贝至一处，在此目录下先运行
+cp *.lack ../
+cd ../
+ls *.fa|while read a;do mv $a.ms.lack $a.ms;done 
+#ls *.ms| sort -n |cut -d '.' -f 1 > gene.list
+#grep '>' *.ms| cut -d '>' -f 2 |cut -d '-' -f 1|cut -d '.' -f 1| sort -u > id.list
+注意id.list的id没有小数点的
+这里的ms文件其实是lack文件，因为下面的代码识别的是.ms的文件
+注：这里genenum.list（是此次所有物种产生的所有的基因，不是用于选择的所有的基因）和id.list也可以自己指定，其顺序即最后生成的cds.fsa文件中
+每个基因的连接顺序以及cds.fsa文件中物种的先后顺序
+再在放有*.fa.ms的文件夹下运行本程序
+python mscollect.py -g genenum.list -s species.list
+运行完生成cds.fsa是我们需要的
+Author: lurui@scgene.com
+Date: 2016.5.4
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+import re
+from Bio import SeqIO
+import sys
+import argparse
+def main(glist, slist):
+        glst = []
+        slst = []
+        f={}
+        result={}
+        for i in open(glist, 'r'):
+                if not i.startswith(' '):
+                        glst.append(i.split()[0])
+        for j in open(slist, 'r'):
+                if not i.startswith(' '):
+                        slst.append(j.split()[0])
+        outfile = open('cds.fsa', 'w')
+        #for m in slst:
+        #       f[m] = open(m+'.fsa', 'w')
+        #       print >> f[m], '>%s' %m
+        for i in glst:
+                ifname = i + '.fa.ms'
+                record = SeqIO.parse(ifname, 'fasta')
+                for t in record:
+                        for j in slst:
+                                if re.search(j, t.id):
+                                        result.setdefault(j, []).append(str(t.seq))                                      
+                                        #print >> f[j], t.seq
+        for m in slst:
+                print >> outfile, '>%s\n%s' %(m, ''.join(result[m]))
+        outfile.close()
+        #for m in slst: f[m].close()
+
+
+
+
+if __name__=='__main__':
+        if len(sys.argv) == 1:
+                print 'Usage: <python> <script> [-h]'
+                exit(1)
+                
+	parser = argparse.ArgumentParser(conflict_handler = 'resolve')
+	parser.add_argument('-g', '--genelist', help='all the gene')
+	parser.add_argument('-s', '--spelist', help='all the species')	
+	args = parser.parse_args()
+        main(args.genelist, args.spelist)
+
+9.建模建树
 
 ==================================================================
 方法 1：
@@ -4939,4 +5061,357 @@ https://github.com/STAR-Fusion/STAR-Fusion
 
 http://ccb.jhu.edu/software/tophat/fusion_index.shtml
 ================================================================
+sudo apt install canu
+ 三代组装软件canu学习笔记 (2017-08-07 14:17:43)
+转载
+▼
+	分类： 三代
+1：这个组装软件起源于PBcR包含在Celera Assembler中（http://wgs-assembler.sourceforge.net/wiki/index.php/Main_Page），该软件最新版本是8.3之后便不在更新。现在被canu取代。
+
+2：canu(http://canu.readthedocs.io/en/latest/index.html)
+参加文献：Koren S, Walenz B P, Berlin K, et al. Canu: scalable and accurate long-read assembly via adaptive k-mer weighting and repeat separation[J]. Genome research, 2017, 27(5): 722-736.
+
+3：目前版本1.5
+
+4：几个重要的参数说明：
+minReadLength 用于组装的最短reads,默认1000
+
+corOutCoverage 用于矫正的数据最小coverage，默认是40x,但实际上的数据在30X-35X之间你可以自己设置为50,60,100,当设置为1000，可以用于组装出数据中质粒，一般该参数用于宏基因组组装
+
+contigFilter="2 1000 0.75 0.75 2"关于contig的过滤
+
+    has fewer than minReads (2) reads, or（这个值可以设置为5）
+    is shorter than minLength (1000), or
+    has a single read spanning singleReadSpan percent (75%) of the contig, or
+    has less than lowCovDepth (2) coverage over at least lowCovSpan fraction (0.75) of the contig
+
+对于低覆盖数据correctedErrorRate=0.075（4.5%-7.5%或者更多）也可以大于1%
+对于高覆盖度数据correctedErrorRate=0.040（4.0%-4.5%），默认The default is 0.045 for PacBio reads，也可以小于1%
+
+如果是AT（GC）富集的样本，建议设置corMaxEvidenceErate=0.15
+
+三、Canu的简单使用
+
+1.   设置spec文件
+
+$ vi spec.txt
+
+useGrid=1
+gridOptions=-S /bin/bash -q all.q -l mem_free=60g
+gridEngineThreadsOption=-pe mpi THREADS
+gridEngineMemoryOption=-l mem_total=MEMORY
+corOutCoverage=80
+ovbMemory=8g
+maxMemory=500g
+maxThreads=48
+ovsMemory=8-500g
+ovsThreads=4
+oeaThreads=4
+
+2.   运行
+
+$ canu -s spec.txt -p ecoli -d ecoli-auto genomeSize=4.8m -pacbio-raw p6.25x.fastq
+
+========================================================
+sudo apt install gnuplot
+命令行绘图工具
+实例1
+#终端输入gnuplot进入命令行，运行脚本load "脚本路径及文件名"
+#type gnuplot then type load 'sin_cos_tan.dem'
+#设置标题及字体
+set title "Simple Plots" font ",20"
+#设置图例在箱子左边
+set key left box
+#设置样点数量，越多越平滑
+set samples 100
+#设置数据类型
+set style data points
+
+#绘制,plot 自变量 因变量（多个因变量之间用逗号，可实现多种图同时呈现）
+plot [-10:10] sin(x),cos(x),tan(x)
+
+实例2
+#type gnuplot then type load 'sin_cos_tan.dem'
+#设置标题及字体
+set title "Simple Plots" font ",20"
+#设置图例在箱子左边
+set key left box
+#设置样点数量，越多越平滑
+set samples 100
+#设置数据类型
+set style data points
+
+#绘制,plot 自变量 因变量（多个因变量之间用逗号，可实现多种图同时呈现）
+plot [-pi/2:pi] cos(x),-(sin(x) > sin(x+1) ? sin(x) : sin(x+1))
+
+实例3
+ set title "3D surface from a grid (matrix) of Z values"
+  2 set xrange [-0.5:4.5]
+  3 set yrange [-0.5:4.5]
+  4 
+  5 set grid
+  6 set hidden3d
+  7 $grid << EOD
+  8 5 4 3 1 0
+  9 2 2 0 0 1
+ 10 0 0 0 1 0
+ 11 0 0 0 2 3
+ 12 0 1 2 4 3
+ 13 EOD
+ 14 splot '$grid' matrix with lines notitle
+
+
+
+（1）基础
+
+set title "Some math functions" // 图片标题
+
+set xrange [-10:10] // 横坐标范围
+
+set yrange [-2:2] // 纵坐标范围
+
+set zeroaxis // 零坐标线
+
+plot (x/4)*2, sin(x), 1/x // 画函数
+
+ 
+
+（2）三维曲线
+
+splot sin(x), tan(x) // 画sin(x)和tan(x)的三维曲线
+
+ 
+
+（3）多条曲线
+
+plot sin(x) title 'Sine', tan(x) title 'Tangent' // 画多条曲线，并且分别指定名称
+
+ 
+
+从不同数据文件中提取信息来画图：
+
+plot "fileA.dat" using 1:2 title 'data A', \
+
+        "fileB.dat" using 1:3 title 'data B'
+
+ 
+
+（4）点和线风格
+
+plot "fileA.dat" using 1:2 title 'data A' with lines, \
+
+        "fileB.dat" using 1:3 title 'data B' with linespoints
+
+可以使用缩写：
+
+using title and with can be abbreviated as u t and w.
+
+ 
+
+plot sin(x) with line linetype 3 linewidth 2
+
+或plot sin(x) w l lt 3 lw 2
+
+plot sin(x) with point pointtype 3 pointsize 2
+
+或plot sin(x) w p pt 3 ps 2
+
+ 
+
+颜色列表大全：
+
+http://www.uni-hamburg.de/Wiss/FB/15/Sustainability/schneider/gnuplot/colors.htm
+
+用法：lc grb "greenyellow"
+
+ 
+
+线条颜色，点的为pointtype
+
+linetype 1 // 红色
+
+linetype 2 // 绿色
+
+linetype 3 // 蓝色
+
+linetype 4 // 粉色
+
+linetype 5 // 比较浅的蓝色
+
+linetype 6 // 褐色
+
+linetype 7 // 橘黄色
+
+linetype 8 // 浅红色
+
+ 
+
+线条粗细，点的为大小pointsize
+
+linewidth 1 // 普通的线
+
+linewidth 2 // 比较粗
+
+linewidth 3 // 很粗
+
+ 
+
+（5）常用
+
+replot // 重绘
+
+set autoscale // scale axes automatically
+
+unset label // remove any previous labels
+
+set xtic auto // set xtics automatically
+
+set ytic auto // set ytics automatically
+
+set xtics 2 // x轴每隔2设一个标点
+
+set xlabel "x axe label"
+
+set ylabel 'y axe label"
+
+set label 'Yield Point" at 0.003,260 // 对一个点进行注释
+
+set arrow from 0.0028,250 to 0.003,280 // 两点之间添加箭头
+
+set grid // 添加网格
+
+reset // gnuplot没有缩小，放大后只能reset后重绘，remove all customization
+
+set key box // 曲线名称加框
+
+set key top left // 改变曲线名称位置
+
+set format xy "%3.2f" // x轴和y轴坐标格式，至少有3位，精确到小数点后两位
+
+quit、q、exit // 退出程序
+
+ 
+
+（6）绘制多个图
+
+set size 1,1 // 总的大小
+
+set origin 0,0 // 总的起点
+
+set multiplot // 进入多图模式
+
+set size 0.5,0.5 // 第一幅图大小
+
+set origin 0,0.5 // 第一幅图起点
+
+plot sin(x)
+
+set size 0.5,0.5
+
+set origin 0,0
+
+plot 1/sin(x)
+
+set size 0.5,0.5
+
+set orgin 0.5,0.5
+
+plot cos(x)
+
+set size 0.5,0.5
+
+set origin 0.5,0
+
+plot 1/cos(x)
+
+unset multiplot
+
+ 
+
+（7）输出文件
+
+set terminal png size 1024, 768 // 保存文件格式和大小
+
+set output "file.png" // 保存文件名称
+
+set terminal X11 // 重新输出到屏幕
+
+ 
+
+（8）脚本
+
+a.plt //后缀名为plt
+
+gnuplot> load 'a.plt'
+
+或gnuplot a.plt
+
+save "graph.gp"
+
+或save "graph.plt"
+
+传入参数
+
+call "a.plt" param1 param2
+
+param1、param2在a.plt中对应于$0、$1
+
+ 
+
+（9）字体设置
+
+输出错误：
+
+Could not find/open font when opening font "arial", using internal non-scalable font
+
+下载RPM包：
+
+wget http://www.my-guides.net/en/images/stories/fedora12/msttcore-fonts-2.0-3.noarch.rpm
+
+rpm -ivh msttcore-fonts-2.0-3.noarch.rpm
+
+设置环境变量：
+
+修改/etc/profile或~/.bashrc，这样设置可以固定下来。
+
+export GDFONTPATH="/usr/share/fonts/msttcore"
+
+export GNUPLOT_DEFAULT_GDFONT="arial"
+
+. /profile/etc
+
+OK，现在可以使用arial字体了。
+================================================================
+sudo apt install octave
+linux下像matlab一样的软件
+
+
+sudo apt install qtiplot
+Linux下科学绘图软件
+====================================================
+如果在终端不想复制的话可以用命令进入文件夹
+cd `ls|sed -n '2p'`
+
+``内是行内命令的输出作为新的命令的参数
+这个表示进入ls后的第二个文件夹
+
+==============================
+fastaqc
+
+sudo apt install gimp
+
+sudo apt install gem
+sudo gem install bio
+
+conda install bioawk
+
+conda install qiime
+=========================================================
+bow.sh
+#$ -S /bin/sh
+/hellogene/scgene01/bio/bin/bwa index P152L1_10.result
+/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2-build P152L1_10.result long
+/hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2 -x long -1  ../P152L1_10/P152L1_10.R1.fq -2 ../P152L1_10/P152L1_10.R2.fq -p 25 | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > long.srt.bam 
+/hellogene/scgene01/bio/bin/samtools index long.srt.bam
+
 

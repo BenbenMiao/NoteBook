@@ -3590,7 +3590,7 @@ mkdir "new_"$1
 cd "new_"$1
 #判断每行的数据都不为0则取其id输出保存
 awk '{if($2 != 0 && $3 != 0 && $4 != 0 && $5 != 0 &&6 != 0 && $7 != 0)print $1".1"}' ../$1/gene_count_matrix.csv > list
-#deAnno,在all.pep.kegg.blastp.1库文件中找出第一列中有list内第一列字符串的行并保存为kegg.blastp
+#deAnno,在all.pep.kegg.blastp.1库文件中找出第一列中有list内第一列字符串的行并保存为kegg.blastp,即蛋白质比对的结果
 python /hellogene/scgene02/RD/RNASeqRef/P135/04Enrichment/bin/deAnno.py list /hellogene/scgene02/RD/RNASeq/Oryza/all.pep.kegg.blastp.1 > kegg.blastp
 #geneAnnoKEGG
 python /hellogene/scgene02/RD/RNASeq/bin/geneAnnoKEGG.py kegg.blastp > kegg.blastp.out
@@ -4218,6 +4218,9 @@ python /hellogene/scgene02/RD/RNASeq/bin/uniqueGene.py Trinity.fasta 01Unigene
 python /hellogene/scgene02/RD/RNASeq/bin/unigene2prot.py 01Unigene/unigene.fa 1 /hellogene/scgene02/RD/RNASeq/db/index/uniprot_plants.fa ../../db/nr.Viridiplantae.fa 02Unigene2prot 
 #02Unigene2prot/prot.fa为上一步产生的结果
 python /hellogene/scgene02/RD/RNASeq/bin/unigene2prot2.py 01Unigene/unigene.fa 02Unigene2prot/prot.fa 03UnigeneNProt
+
+----------------------------------------------------------------------
+
 
 ==================================================================================
 1.samtools
@@ -5413,5 +5416,687 @@ bow.sh
 /hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2-build P152L1_10.result long
 /hellogene/scgene01/bio/software/bowtie2-2.2.5/bowtie2 -x long -1  ../P152L1_10/P152L1_10.R1.fq -2 ../P152L1_10/P152L1_10.R2.fq -p 25 | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > long.srt.bam 
 /hellogene/scgene01/bio/bin/samtools index long.srt.bam
+
+
+
+==========================================================
+1.lib.conf文件
+#maximal read length
+max_rd_len=150
+[LIB]
+#average insert size
+avg_ins=500
+#if sequence needs to be reversed
+reverse_seq=0
+#in which part(s) the reads are used
+asm_flags=3
+#use only first 100 bps of each read
+rd_len_cutoff=150
+#in which order the reads are used while scaffolding
+rank=1
+# cutoff of pair number for a reliable connection (at least 3 for short insert size)
+pair_num_cutoff=3
+#minimum aligned length to contigs for a reliable read location (at least 32 for short insert size)
+map_len=32
+#a pair of fastq file, read 1 file should always be followed by read 2 file
+q1=/hellogene/scgene03/prj/SCG-70616-198/01.fq/part_R1.fq
+q2=/hellogene/scgene03/prj/SCG-70616-198/01.fq/part_R2.fq
+
+
+2.kmer.sh
+SOAPdenovo2-bin-LINUX-generic-r240/SOAPdenovo-127mer all -s lib.conf -o genome -K 96 -p 32
+
+============================================
+remap.sh
+#$ -S /bin/sh
+if [ $# -eq 0 ]; then
+        echo "Program: Package the sequecing data and statics for mtFish sequencing"
+        echo "Usage: $0 <genome.fasta> <fq1> <fq2>"
+        exit 1
+fi
+
+
+ref=$1
+fq1=$2
+echo '#$ -S /bin/sh' > remap.sh
+echo "/hellogene/scgene01/bio/bin/bwa mem -t 32 ${ref}  ${fq1} | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - |/hellogene/scgene01/bio/bin/samtools sort -@ 32 - > genome.map.bam" >> remap.sh 
+echo  '/hellogene/scgene01/bio/bin/samtools index genome.map.bam'  >> remap.sh
+echo '/hellogene/scgene01/bio/bin/samtools depth genome.map.bam > map.dp' >>remap.sh
+qsub -cwd -l vf=12g,p=32 -q prj.q remap.sh
+
+
+remap.sh
+#$ -S /bin/sh
+/hellogene/scgene01/bio/bin/bwa mem -t 32 ../../all.cdna  ../../01.fq/DYM1_RRA126332-V_1.clean.fq.gz | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - |/hellogene/scgene01/bio/bin/samtools sort -@ 32 - > genome.map.bam
+/hellogene/scgene01/bio/bin/samtools index genome.map.bam
+/hellogene/scgene01/bio/bin/samtools depth genome.map.bam > map.dp
+
+单端测序：
+bwa比对
+bwa men -t 4 ref/all.cdna v1.fq.gz 产生sam文件
+samtools view -SbF genome.map.sam (-S自动检测输入类型，-b输出bam格式，-F没有flag的reads）
+samtools sort -@ 4 genome.map.bam(默认按照位置排序）
+samtools index genome.map.bam (这里建立索引产生genome.map.bam.bai)
+samtools depth genome.map.bam > map.dp (测序深度）
+python averdep.py map.dp（平均深度）
+-----------------------------------------------------------------
+averdep.py
+ # -*- coding: utf-8 -*- 
+'''''''''''''''''''''''''''''''''''''''''''''
+在多序列的fasta文件remap到fastq后，会产生一个map.dp
+的文件，将其拷贝至一处，运行python averdep.py map.dp
+会产生一个map.dp.out的文件，这个文件第一列是多序列的fasta
+文件中的序列id，第二列是多序列的fasta文件的序列的平均深度
+（注：在remap的时候序列描述行中如果有空格remap会只取第一个空格前的部分作为id）
+Author: lurui@scgene.com
+Date: 2016.4.20
+'''''''''''''''''''''''''''''''''''''''''''''
+from __future__ import division
+import re
+import sys
+from Bio import SeqIO
+
+def main(depfile):
+    outfile = open(depfile+'.out', 'w')
+    dep ={}
+    dep1={}
+    fa_len={}
+    for i in SeqIO.parse(fa,'fasta'):
+	fa_len[i.id]=len(i.seq)
+    for i in open(depfile, 'r'):
+	eachlst=i.strip().split()
+        #eachlst = re.findall(r'\w+', i)
+        seqid = eachlst[0]
+        seqdep = int(eachlst[-1])
+        dep.setdefault(seqid, []).append(seqdep)
+    	dep1.setdefault(seqid,0)
+	dep1[seqid]=dep1[seqid]+1
+    newdep ={}
+    for k, v in dep.items():
+        averdep = average(v)
+        newdep[k]=[averdep,round(float(dep1[k])/fa_len[k],2)]
+    sortdep = sorted(newdep.iteritems(), key = lambda d:d[1], reverse=True)
+    print >> outfile, '%s\t%s\t%s' %('Seqid', 'Average_depth','cov')
+    for j in sortdep:
+        print >> outfile, '%s\t%s\t%s' %(j[0], j[1][0],j[1][1])
+    outfile.close()
+    
+def average(lst):
+    num = len(lst)
+    summary = sum(lst)
+    aver = round(summary / num, 2)
+    return aver
+    
+if __name__=='__main__':
+    if len(sys.argv) == 3:
+        scgene, depfile, fa= sys.argv
+        main(depfile)
+    else:
+        print 'Usage: <python> <script> <depthfile>'
+        exit(2)
+---------------------------------------------------------------
+range.py
+#!/usr/bin/env python
+import os
+import re
+fr=open('map.dp.out')
+fw=open('dprange','w')
+firstline=fr.readline()
+line_fh=fr.readlines()
+count=len(line_fh)
+a=0
+b=0
+c=0
+d=0
+e=0
+f=0
+g=0
+h=0
+i=0
+j=0
+for eline in line_fh:
+	eline=eline.replace('\t',' ')
+	eline=eline.split()
+	dp=eline[2]
+	dp=float(dp)
+	if dp>=0.0 and dp<0.1:
+		a=a+1
+	elif dp>=0.1 and dp<0.2:
+		b=b+1
+	elif dp>=0.2 and dp<0.3:
+		c=c+1	
+	elif dp>=0.3 and dp<0.4:
+		d=d+1
+	elif dp>=0.4 and dp<0.5:
+		e=e+1
+	elif dp>=0.5 and dp<0.6:
+		f=f+1
+	elif dp>=0.6 and dp<0.7:
+		g=g+1
+	elif dp>=0.7 and dp<0.8:
+		h=h+1
+	elif dp>=0.8 and dp<0.9:
+		i=i+1
+	elif dp>=0.9 and dp<=1.0:
+		j=j+1
+a=float(a)/count*100
+b=float(b)/count*100
+c=float(c)/count*100
+d=float(d)/count*100
+e=float(e)/count*100
+f=float(f)/count*100
+g=float(g)/count*100
+h=float(h)/count*100
+i=float(i)/count*100
+j=float(j)/count*100
+fw.write("dprange:\n0~0.1:\t%.2f\n"%a)
+fw.write("0.1~0.2:\t%.2f\n"%b)
+fw.write("0.2~0.3:\t%.2f\n"%c)
+fw.write("0.3~0.4:\t%.2f\n"%d)
+fw.write("0.4~0.5:\t%.2f\n"%e)
+fw.write("0.5~0.6:\t%.2f\n"%f)
+fw.write("0.6~0.7:\t%.2f\n"%g)
+fw.write("0.7~0.8:\t%.2f\n"%h)
+fw.write("0.8~0.9:\t%.2f\n"%i)
+fw.write("0.9~1.0:\t%.2f\n"%j)
+fw.write("total :%d"%count)
+
+fr.close()
+fw.close()
+------------------------------------------------------------
+python ../Bam2ReadNumber.py ref/all.cdna genome.map.bam map.dp
+Bam2ReadNumber.py
+#! /usr/bin/python
+
+import os
+import sys
+from Bio import SeqIO
+def main(cds,bam,bam_dip):
+    cds_dic={}
+    all_gene={}
+    for i in SeqIO.parse(cds,'fasta'):
+        cds_dic[i.id]=i.seq
+        ID=i.id.split(".")[0]
+        all_gene.setdefault(ID,0)
+    gene_num=len(all_gene.keys())
+    covRatioGene(bam,gene_num)
+    PercentOfGeneCov(bam_dip,cds_dic)
+def PercentOfGeneCov(bam_dip,cds_dic):
+    bam_dip_dic={}
+    result={}
+    out=open("Percent_gene_body.xls",'w')
+    out.write("#Percent_gene_body\tNumber\n")
+    for i in open(bam_dip,'r'):
+        line=i.strip().split()
+        name='%s_%s' % (line[0],line[1])
+        bam_dip_dic.setdefault(name,int(line[2]))
+    for i,k in cds_dic.items():
+        if len(k) < 1000:
+            continue
+        for x in range(1,101):
+            num=0
+            depth=0
+            result.setdefault(x,0)
+            percent=float(x)/100
+            length=len(k)
+            start=int(round(length*(percent-0.01)))+1
+            end=int(round(length*percent))+1
+            for y in range(start,end):
+                name="%s_%s" % (i,y)
+                bam_dip_dic.setdefault(name,0)
+                depth+=bam_dip_dic[name]
+                if bam_dip_dic[name] !=0:
+                    num+=1
+            if num != 0:
+                result[x]+=depth/num
+    for x in range(1,101):
+        out.write('%s\t%s\n' % (x,result[x]))
+    out.close()
+def covRatioGene(bam,gene_num):
+    bam_dic={}
+    gene_list=[]
+    out=open("#Satutation_distrebution.xls",'w')
+    os.system("samtools view %s > genome.bam.txt" % (bam))
+    out.write("#Size\tPercent(%)\n")
+    for i in open('genome.bam.txt','r'):
+        line=i.strip().split("\t")
+        gene=line[2].split('.')[0]
+        ID=line[0]
+        bam_dic.setdefault(ID,0)
+        if bam_dic[ID]==0:
+            gene_list.append(gene)
+            bam_dic[ID]+=1
+    begin_num=0
+    Reads=len(bam_dic.keys())
+    for i in range(1,101):
+        result={}
+        percent=float(i)/100
+        size=int(round(Reads*percent))
+        for x in gene_list[0:size]:
+            result.setdefault(x,0)
+        result_gene_num=len(result.keys())
+        out.write("%s\t%s\n" % (size,round(float(result_gene_num)/gene_num*100,2)))
+    out.close()
+    os.system("rm -f genome.bam.txt")
+if len(sys.argv) ==4:
+    main(sys.argv[1],sys.argv[2],sys.argv[3])
+if len(sys.argv) !=4:
+    print "Usage: %s <genome> <not sort bam> <depth.txt>" 
+-------------------------------------------------------------------
+
+1.对参考基因组建立比对的索引
+hisat2-2.1.0/hisat2-build -p 32 DataBase/Special/Oryza_sativa/Japonica/msu7.0/all.con genome_hisat
+2.hisat比对产生sam文件转为bam文件并排序
+hisat2-2.1.0/hisat2 -p 32 --dta -5 20 -3 20 -x genome_hisat -1 ../../01.fq/TYM1_RRA126335-V_1.clean.fq.gz  -2 ../../01.fq/TYM1_RRA126335-V_2.clean.fq.gz  |/hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 25 - > hisat2.srt.bam
+3.对参考注释文件输出gtf文件（-A gene abundance estimation output file
+-B enable output of Ballgown table files which will be created in the same directory as the output GTF (requires -G, -o recommended)
+-b enable output of Ballgown table files but these files will be     created under the directory path given as <dir_path>
+-G <guide_gff>   reference annotation to include in the merging (GTF/GFF3)
+-o <out_gtf>     output file name for the merged transcripts GTF
+-l <label>       name prefix for output transcripts (default: MSTRG)
+-T <min_tpm>     minimum input transcript TPM to include in the merge
+-p number of threads (CPUs) to use (default: 1)
+
+stringtie-1.3.3b.Linux_x86_64/stringtie -G /hellogene/scgene01/DataBase/Special/Oryza_sativa/Japonica/msu7.0/all.gff3 -l T2 -o genome.fa.gtf -e -p 8 -A genome.gene.xls -B hisat2.srt.bam
+
+双端测序：
+HISAT2提供两个Python脚本将GTF文件转换成hisat2-build能使用的文件：
+extract_exons.py Sus_scrofa.Sscrofa11.1.90.chr.gtf > genome.exon
+extract_splice_sites.py Sus_scrofa.Sscrofa11.1.90.chr.gtf > genome.ss
+最后创建Index
+hisat2-build –ss genome.ss –exon genome.exon Sus_scrofa.Sscrofa11.1.dna.toplevel.fa Sus_tran 
+Hisat2比对
+将RNA-seq的测序reads使用hisat2比对
+hisat2 -p 8 –dta -x ./ref/Sus_tran/Sus_tran -1 ./fastq/Blast_1.clean.fq -2 ./fastq/Blast_2.clean.fq -S ./hisat2-out/Blast.sam 
+
+HTSeq安装
+使用pip直接下载：
+pip install HTSeq
+conda install HTSeq
+htseq-count 计数
+将sam文件转换为bam文件
+samtools view -S ./hisat2-out/Blast.sam -b > ./BAM/Blast.bam
+bam文件排序#因为是双端测序，必须对bam文件排序
+samtools sort -n ./BAM/Blast.bam ./BAM/Blast_sort.bam
+samtools view -h ./BAM/Blast_sort.bam > ./SAM/Blast_sort.sam
+htseq-count -s no ./SAM/Blast_sort.sam genes.gtf > ./reads count/Blast.count
+
+stringtie转录本处理
+
+1、 stringtie组装转录本(首先将sam文件转换为bam文件，并排序；然后对每个样本进行转录本组装)
+
+for ele in Blast ICM Morula Oocyte P1_cell P2_cell P4_cell P8_cell PFF TE
+do
+echo -e “samtools view -S ele.sam−b>
+ele.bam\nsamtools sort -@ 8 ele.bamele.sorted\nstringtie -p 8 -G Sus.gtf -o ele.gtfele.sorted.bam” >> out.sh
+done 
+
+2 、stringtie合并转录本（将所有样本的转录本进行合并）
+stringtie –merge -p 8 -G Sus.gtf -o stringtie_merged.gtf mergelist.txt #mergelist.txt是自己创建的
+
+for ele in Blast ICM Morula Oocyte P1_cell P2_cell P4_cell P8_cell PFF TE
+do
+echo -e “./$ele.gtf” >> mergelist.txt
+done 
+
+3、stringtie评估表达量（计算表达量并且为Ballgown包提供输入文件）
+for ele in Blast ICM Morula Oocyte P1_cell P2_cell P4_cell P8_cell PFF TE
+do
+echo -e “stringtie -p 8 -G stringtie_merged.gtf -e -B -o ballgown/ele/ele.gtf $ele.sorted.bam” >> out2.sh
+done 
+
+在-B 指定的文件夹下生成特定的文件
+e2t.ctab e_data.ctab i2t.ctab i_data.ctab t_data.ctab
+e即外显子、i即内含子、t转录本；e2t即外显子和转录本间的关系，i2t即内含子和转录本间的关系，t_data即转录本的数据 
+
+Ballgown表达量分析
+
+1、 Ballgown的安装
+source(“http://bioconductor.org/biocLite.R“)
+biocLite(“ballgown”)
+2、文件准备与分析
+将数据的分组信息写入一个csv文件，此处phenodata.csv文件 
+
+3、运行R脚本，分析
+Rscript expr.R
+
+library(ballgown)
+library(genefilter)
+a <- read.csv(“pheno_data.csv”)
+bg <- ballgown(dataDir = ‘ballgown’, samplePattern = “Sample”, pData = a)
+bg_filt <- subset(bg, “rowVars(texpr(bg)) > 0.1”, genomesubset=TRUE)
+gene_expression <- gexpr(bg_filt)
+write.csv(gene_expression, “./FPKM/gene_expression.csv”)
+transcripts_expression <- texpr(bg_filt)
+write.csv(transcripts_expression, “./FPKM/transcripts_expression.csv”)
+
+
+===============================================================
+软件安装
+下载StringTie并解压：
+tar zxvf stringtie-1.1.2.Linux_x86_64.tar.gz
+将HISAT2目录添加到环境变量：
+vi ~/.bashrc
+在文件末位添加：
+export PATH=/home/chenwen/bin/stringtie-1.1.2.Linux_x86_64:$PATH
+保存退出
+source ~/.bashrc
+
+StringTie的输入文件
+HISAT的输出文件为SAM格式，需要经过两步转换成StringTie可以使用的BAM格式：
+1. SAM转BAM，并排序：
+samtools view -S -b input.sam | samtools sort – input.sorted
+2.修改HI标签：
+samtools view -h input.bam | perl -ne ‘if(/HI:i:(d+)/) {$m=$1-1; $_ =~ s/HI:i:(d+)/HI:i:$m/} print $_;’| samtools view -bS – > input.correct.bam
+
+运行StringTie
+stringtie SRR534294.correct.bam -p 16 -G genes.gtf -B -o stout/transcripts.gtf
+-p 指定线程数，默认1
+-G 指定参考的转录组注释文件
+-B 生成用于Ballgown 分析的文件
+-o 指定输出文件
+更多参数请查看HISAT2的操作手册：
+https://ccb.jhu.edu/software/stringtie/index.shtml?t=manual
+===========================================================================
+5.序列组装（assembly）
+原始代码：
+stringtie -p 16 -G /genes/brassica.gff（基因组注释文件） -o /data/transcripts/【sample name】.gtf（输出，比对结果，gtf文件） -l 【sample name】（命名规则）  /data/bamfiles/【sample name】.bam（输入，bam文件所在目录）
+封装成BASH脚本：
+#! /bin/bash
+# stringtie 1st step
+while read line
+do
+      stringtie -p 16 -G/genes/brassica.gff -o /data/transcripts/${line}.gtf -l ${line}/data/bamfiles/${line}.bam
+
+done < /files/samples.txt
+6.Merge
+stringtie --merge -p 16 -G /genes/brassica.gff -o stringtie_merged.gtf/data/transcripts/mergelist.txt
+gffcompare检测组装结果：
+gffcompare -r /genes/brassica.gff -G -o merged stringtie_merged.gtf
+
+7.计算表达量并输出成ballgown格式
+原始代码：
+stringtie -e -B -p 16 -G /data/transcripts/stringtie_merged.gtf（用merge生成的gtf文件代替基因组注释） -o /data/ballgown/$【sample name】/$【sample name】.gtf（输出为ballgown所需的输入格式） /data/bamfiles/【sample name】.bam（输入，bam文件）
+封装成BASH脚本：
+#! /bin/bash
+# stringtie 3rd step
+while read line
+do
+        stringtie -e -B -p 16 -G/data/transcripts/stringtie_merged.gtf -o /data/ballgown/${line}/${line}.gtf/data/bamfiles/${line}.bam
+done < /files/samples.txt
+8.ballgown分析差异表达基因（在R中进行）
+>install.packages(‘devtools’)
+>source('http://www.bioconductor.org/biocLite.R')
+>biocLite(c(’ballgown’, 'genefilter’,'dplyr’,'devtools’))
+>library(ballgown)
+>library(genefilter)
+>library(dplyr)
+>library(devtools)
+>file <- ballgown(dataDir='/data/ballgown',samplePattern=【sample名前缀】）输入基因表达数据
+>samplesNames(file)查看ballgown文件中各样本的排列顺序
+>pData(file) <- read.csv(‘/data/geuvadis_phenodata.csv’）（导入自制的表型数据）
+>filefilt <-subset(file,'rowVars(texpr(file))>1',genomesubset=TRUE)（过滤掉表达差异较小的基因）
+>diff_genes <- stattest(filefilt,feature='gene',covariate=【自变量】,adjustvars=【无关变量】,meas='FPKM')（统计差异表达的基因）
+将差异表达基因按pval从小到大排序，并写入csv文件：
+>diff_genes <- arrange(diff_genes,pval)
+>write.csv(diff_genes,'/data/diff_genes',row.names=FALSE)
+------------------------------------------------------------------
+heatmap_original_remove_zero.txt
+gene    DYM1    DYM2    DYM3    TYM1    TYM2    TYM3
+LOC_Os06g05820  1.8738  2.0727  2.5135  2.1371  2.2637  2.2891
+LOC_Os01g55490  8.9735  8.9807  9.4652  10.6575 9.5136  10.5006
+LOC_Os09g36360  8.3987  8.5437  9.3577  12.1213 10.8168 10.4552
+LOC_Os07g38010  4.1274  5.3498  5.1393  4.6478  4.2816  4.6023
+
+pca.R
+library(gmodels)
+library(ggplot2)
+##输入
+inname = "heatmap_original_remove_zero.txt" #input file name
+outname = "PCA.pdf" # out PCA figure name
+group <- c("DYM1","DYM2","DYM3","TYM1","TYM2","TYM3") #define the color for points
+##step1: 数据的读取和处理
+expr <- read.table(inname, header=T, row.names=1) #read the expr data
+data <- t(as.matrix(expr)) #transpose the data
+##step2：PCA分析
+#do PCA
+data.pca <- fast.prcomp(data,retx=T,scale=T,center=T) #对数据进行z-score归一化
+##step3： PCA结果解析
+#fetch the proportion of PC1 and PC2
+a <- summary(data.pca)
+tmp <- a[4]$importance
+pro1 <- as.numeric(sprintf("%.3f",tmp[2,1]))*100
+pro2 <- as.numeric(sprintf("%.3f",tmp[2,2]))*100
+#将成分矩阵转换为数据框
+pc = as.data.frame(a$x)
+#给pc的数据框添加名称列和分组列
+pc$group = group
+pc$names = rownames(pc)
+write.table(pc,"pca.txt") #输出画图数据
+##step 4: 绘图
+#draw PCA plot figure
+xlab=paste("PC1(",pro1,"%)",sep="")
+ylab=paste("PC2(",pro2,"%)",sep="")
+pca=ggplot(pc,aes(PC1,PC2)) +
+geom_point(size=3,aes(color=group)) +
+geom_text(aes(label=names),size=4,vjust=-1)+labs(x=xlab,y=ylab,title="PCA") + #vjust可调整点标签位置
+geom_hline(yintercept=0,linetype=4,color="grey") +
+geom_vline(xintercept=0,linetype=4,color="grey") +
+theme_bw()
+#保存结果
+ggsave(outname,pca,width=12,height=8)Zeiformes	Zeidae Zeus faber 
+
+----------------------------------------------
+heatmap_original.txt
+gene    DYM1    DYM2    DYM3    TYM1    TYM2    TYM3
+LOC_Os06g05820  1.8738  2.0727  2.5135  2.1371  2.2637  2.2891
+LOC_Os10g27460  0.0     0.0     0.0     0.0     0.0     0.0
+LOC_Os02g35980  0.0     0.0     0.0     0.0     0.0     0.0
+LOC_Os09g23260  0.0     0.0     0.0     0.0     0.0     0.0
+LOC_Os01g41670  0.0     0.0     0.0     0.0     0.0     0.0
+LOC_Os02g13480  0.0     0.0     0.0     0.0     0.0     0.0
+LOC_Os01g55490  8.9735  8.9807  9.4652  10.6575 9.5136  10.5006
+
+library("pheatmap")
+pdf("heatmap.pdf",width = 10, height = 10)
+data=read.table("heatmap_original_remove_zero.txt",header=T,row.names=1,sep="\t")
+matrix=cor(data) #计算相关系数
+write.table(matrix,"heatmap_matrix.txt",sep="\t")
+pheatmap(matrix,cluster_rows=F,cluster_cols=F, display_numbers=T, cellwidth = 85, color=colorRampPalette(c("white", "steelblue"))(100)) #行和列都不聚类，并且在热图中显示数值
+------------------------------------------------------
+sudo apt install mrbayes
+远距离物种用ML最大似然法
+近距离物种用MB MrBayes
+mb -i xxx.nexus
+
+1.物种基因
+2.muscle比对
+3.产生.fsa文件
+4.mega转为.nexus格式
+5.mb -i xxx.nexus
+======================================
+spades.sh
+#$ -S /bin/sh
+/hellogene/scgene01/opt/bin/python /hellogene/scgene01/bio/pip/ass/SPAdes-3.5.0-Linux/bin/spades.py -k 79,97 --only-assembler -1 /hellogene/scgene03/prj/SCG-70814-202/01.fq/RK80420HM_DSW62808-V_1.clean.fq.gz -2 /hellogene/scgene03/prj/SCG-70814-202/01.fq/RK80420HM_DSW62808-V_2.clean.fq.gz -t 32 -m 100 -o 03.ass/spadeAss
+
+bow.sh
+#$ -S /bin/sh
+/hellogene/scgene01/bio/bin/bwa index Agelas_sp._mitochondrion_complete_genome.fasta
+/hellogene/scgene01/bio/bin/bwa mem -t 14 Agelas_sp._mitochondrion_complete_genome.fasta  ../01.fq/RK80420HM_DSW62808-V_1.clean.fq.gz ../01.fq/RK80420HM_DSW62808-V_2.clean.fq.gz | /hellogene/scgene01/bio/bin/samtools view -SbF 0x804 - | /hellogene/scgene01/bio/bin/samtools sort -@ 8 - > genome.map.bam
+/hellogene/scgene01/bio/bin/samtools index genome.map.bam
+
+Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]
+===========================================
+sudo apt install staden线粒体组装
+sudo apt install clustalx
+sudo apt install clustalo
+
+pip install khmer
+
+conda install snpsift
+conda install snpeff
+conda install snpsplit
+
+curl 'http://genome.ucsc.edu/cgi-bin/hgTables?hgsid=646311755_P0RcOBvAQnWZSzQz2fQfBiPPSBen&boolshad.hgta_printCustomTrackHeaders=0&hgta_ctName=tb_ncbiRefSeq&hgta_ctDesc=table+browser+query+on+ncbiRefSeq&hgta_ctVis=pack&hgta_ctUrl=&fbQual=whole&fbUpBases=200&fbExonBases=0&fbIntronBases=0&fbDownBases=200&hgta_doGetBed=get+BED' >mm10.refseq.bed
+
+wget ftp://ftp.ccb.jhu.edu/pub/data/bowtie2_indexes/mm10.zip
+wget ftp://ftp.ccb.jhu.edu/pub/data/bowtie2_indexes/hg19.zip
+
+Reference genome
+
+The reference genome should be a single whole FASTA file containg all chromosome data. This file shouldn't be compressed. For human data, typicall hg19/GRch37 or hg38/GRch38 assembly is used, which can be downloaded from following sites:
+
+    hg19/GRch37: ftp://ftp.ncbi.nlm.nih.gov/sra/reports/Assembly/GRCh37-HG19_Broad_variant/Homo_sapiens_assembly19.fasta
+    hg38/GRch38: http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz Remember to decompress hg38.fa.gz since it is gzipped and is not supported currently.
+
+
+
+sudo apt install spark
+sudo apt install scala
+sudo apt install ocaml
+
+
+tophat-cufflinks流程
+http://www.360doc.com/content/17/0802/19/45954458_676165658.shtml
+
+gff注释文件下载
+https://www.gencodegenes.org/releases/19.html
+
+for ((i=56;i<=58;i++));do hisat2 -t -x /mnt/f/rna_seq/data/reference/index/hg19/genome -1 /mnt/f/rna_seq/data/SRR35899${i}.sra_1.fastq.gz -2 /mnt/f/rna_seq/data/SRR35899${i}.sra_2.fastq.gz -S SRR35899${i}.sam ;done 
+# 小鼠比对 
+for ((i=59;i<=62;i++));do hisat2 -t -x /mnt/f/rna_seq/data/reference/index/mm10/genome -1 /mnt/f/rna_seq/data/SRR35899${i}.sra_1.fastq.gz -2 /mnt/f/rna_seq/data/SRR35899${i}.sra_2.fastq.gz -S SRR35899${i}.sam; done
+
+================================================================
+我们需要纠结是否真的需要比对，如果你只需要知道已知基因的表达情况，那么可以选择alignment-free工具（例如salmon, sailfish)，如果你需要找到noval isoforms，那么就需要alignment-based工具（如HISAT2, STAR）。到了这一篇的基因（转录本）定量，需要考虑的因素就更加多了，以至于我不知道如何说清才能理清逻辑。
+定量分为三个水平
+
+    基因水平(gene-level)
+    转录本水平(transcript-level)
+    外显子使用水平(exon-usage-level)。
+    在基因水平上，常用的软件为HTSeq-count，featureCounts，BEDTools, Qualimap, Rsubread, GenomicRanges等。以常用的HTSeq-count为例，这些工具要解决的问题就是根据read和基因位置的overlap判断这个read到底是谁家的孩子。值得注意的是不同工具对multimapping reads处理方式也是不同的，例如HTSeq-count就直接当它们不存在。而Qualimpa则是一人一份，平均分配。
+    对每个基因计数之后得到的count matrix再后续的分析中，要注意标准化的问题。如果你要比较同一个样本(within-sample)不同基因之间的表达情况，你就需要考虑到转录本长度，因为转录本越长，那么检测的片段也会更多，直接比较等于让小孩和大人进行赛跑。如果你是比较不同样本（across sample）同一个基因的表达情况，虽然不必在意转录本长度，但是你要考虑到测序深度（sequence depth)，毕竟测序深度越高，检测到的概率越大。除了这两个因素外，你还需要考虑GC%所导致的偏差，以及测序仪器的系统偏差。目前对read count标准化的算法有RPKM（SE）, FPKM（PE），TPM, TMM等，不同算法之间的差异与换算方法已经有文章进行整理和吐槽了。但是，有一些下游分析的软件会要求是输入的count matrix是原始数据，未经标准化，比如说DESeq2，这个时候你需要注意你上一步所用软件会不会进行标准化。
+    在转录本水平上，一般常用工具为Cufflinks和它的继任者StringTie， eXpress。这些软件要处理的难题就时转录本亚型（isoforms）之间通常是有重叠的，当二代测序读长低于转录本长度时，如何进行区分？这些工具大多采用的都是expectation maximization（EM）。好在我们有三代测序。
+    上述软件都是alignment-based，目前许多alignment-free软件，如kallisto, silfish, salmon，能够省去比对这一步，直接得到read count，在运行效率上更高。不过最近一篇文献[1]指出这类方法在估计丰度时存在样本特异性和读长偏差。
+    在外显子使用水平上，其实和基因水平的统计类似。但是值得注意的是为了更好的计数，我们需要提供无重叠的外显子区域的gtf文件[2]。用于分析差异外显子使用的DEXSeq提供了一个Python脚本（dexseq_prepare_annotation.py）执行这个任务。
+
+小结
+
+计数分为三个水平： gene-level, transcript-level, exon-usage-level
+标准化方法： FPKM RPKM TMM TPM
+==================================================================
+STAR的安装
+
+cd biosoft && mkdir STAR && cd STAR
+wget https://github.com/alexdobin/STAR/archive/2.5.3a.tar.gz
+tar -xzf 2.5.3a.tar.gz
+cd STAR-2.5.3a
+
+# for easy use, add bin/ to your PATH
+
+下载需要参考基因组并进行index构建
+
+# downloading dna index fasta file
+nohup wget -r -np -nH -nd -R index.html -L ftp://ftp.ensembl.org/pub/release-90/fasta/homo_sapiens/dna_index/ &
+
+# download gft annotation file
+nohup wget ftp://ftp.ensembl.org/pub/release-90/gtf/homo_sapiens/Homo_sapiens.GRCh38.90.chr_patch_hapl_scaff.gtf.gz &
+
+mkdir STAR_index && cd STAR_index
+STAR --runMode genomeGenerate --genomeDir ~/reference/STAR_index/ --genomeFastaFiles ~/reference/genome/hg38/Homo_sapiens.GRCh38.dna.toplevel.fa --sjdbGTFfile ~/reference/genome/hg38/Homo_sapiens.GRCh38.90.chr_patch_hapl_scaff.gtf --sjdbOverhang 199
+
+# --sjdbOverhang 数值为reads长度-1
+# Mode 为generate
+# --genomeFastaFiles --sjdbGTFfile 分别对应fasta文件和GTF文件
+
+STAR的使用
+
+# STAR的manual里面给了最基本的比对参数示例
+STAR
+--runThreadN NumberOfThreads
+--genomeDir /path/to/genomeDir
+--readFilesIn /path/to/read1 [/path/to/read2 ]
+
+# 基本示例，
+针对fastq.gz文件增加--readFilesCommand gunzip -c 参数/--readFilesCommand zcat参数，针对bzip2文件使用--readFilesCommand bunzip2 -c参数
+STAR --runThreadN 20 --genomeDir ~/reference/STAR_index/ --readFilesCommand zcat --readFilesIn ~/RNA-seq/LiuPing_data/RNA-seq/SC_w2q20m35_N_1.fq.gz ~/RNA-seq/LiuPing_data/RNA-seq/SC_w2q20m35_N_2.fq.gz
+
+# 输出unsorted or sorted bam file
+--outSAMtype BAM Unsorted 实际上就是-name 的sort，下游可以直接接HTSeq
+--outSAMtype BAM SortedByCoordinate
+--outSAMtype BAM Unsorted SortedByCoordinate 两者都输出
+
+额外参数说明
+
+# 单独指定注释文件，而不用在构建的时候使用
+--sjdbGTFfile /path/to/ann.gtf
+--sjdbFileChrStartEnd /path/to/sj.tab
+
+# ENCODE参数
+
+# 减少伪junction的几率
+--outFilterType BySJout
+
+# 最多允许一个reads被匹配到多少个地方
+--outFilterMultimapNmax 20
+
+# 在未有注释的junction区域，最低允许突出多少个bp的单链序列
+--alignSJoverhangMin 8
+
+# 在有注释的junction区域，最低允许突出多少个bp的单链序列
+--alignSJDBoverhangMin 1
+
+# 过滤掉每个paired read mismatch数目超过N的数据，999代表着忽略这个过滤
+--outFilterMismatchNmax 999
+
+# 相对paired read长度可以允许的mismatch数目，如果read长度为100，数值设定为0.04，则会过滤掉100*2*0.04=8个以上的数据
+--outFilterMismatchNoverReadLmax 0.04
+
+# 最小的intro长度
+--alignIntronMin 20
+
+# 最大的intro长度
+--alignIntronMax 1000000
+
+# maximum genomic distance between mates，翻译不出来，自行理解
+--alignMatesGapMax 1000000
+
+STAR的输出
+
+    STAR可以根据你的参数设定输出多个结果文件，包含各种信息，下面对默认参数情况下的输出文件做了一个详细的展示，有些不好翻译的地方我选择使用原汁原味的manual text
+
+    Aligned.out.sam
+    Aligned.out.sam当然就是我们的比对结果啦！
+
+E00516:168:H37WKCCXY:8:1101:6400:59130    99    1    92836373    255    20M1063N129M    =    92837548    4244    GGCTTGTCTATCCCTCACAGTACCAAACGATTCCCTGGTTATGATTCTGAAAGCAAGGAATTTAATGCAGAAGTACATCGGAAGCACATCATGGGCCAGAATGTTGCAGATTACATGCGCTACTTAATGGAAGAAGATGAAGATGCTTA    AAFFFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ    NH:i:1    HI:i:1    AS:i:289    nM:i:0
+
+# 我截取了一条比对信息
+我们来看一下最后面的 NH:i:1  HI:i:1  AS:i:289    nM:i:0
+NH:i:后面的数值代表着此条read比对到几个loci，1代表着unique map，数值大于1代表着multi-mappers
+HI:i:后面的数值attrbiutes enumerates multiple
+alignments of a read starting with 1，下游分析接cufflinks or stringtie的时候需要使用参数--outSAMattrIHstart 0
+AS:i:的数值代表着local alignment score (paired for paired-edn reads)
+nM:i:的数值代表着the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate
+关于下游处理工具的兼容性还需要使用者自己仔细参考manual
+
+    Log.out文件
+    Log.out文件记录了程序运行时的信息，可以用来回溯错误信息。
+
+========================================================
+conda install STAR
+应用时用STAR
+conda install express
+
+    Subread: a general-purpose read aligner which can align both genomic DNA-seq and RNA-seq reads. It can also be used to discover genomic mutations including short indels and structural variants.
+    Subjunc: a read aligner developed for aligning RNA-seq reads and for the detection of exon-exon junctions. Gene fusion events can be detected as well.
+    featureCounts: a software program developed for counting reads to genomic features such as genes, exons, promoters and genomic bins.
+    Sublong: a long-read aligner that is designed based on seed-and-vote.
+    exactSNP: a SNP caller that discovers SNPs by testing signals against local background noises.
+
+conda install subread
+下载安装subjunc,featurecounts
+conda install bedtools
+
+参考基因，注释等序列下载
+https://ccb.jhu.edu/software/tophat/igenomes.shtml
 
 
